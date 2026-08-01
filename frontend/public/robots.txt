@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://ieltsaicoach.com/sitemap.xml
