@@ -10,7 +10,11 @@ import {
   BarChart2, 
   Settings, 
   GraduationCap,
-  Zap
+  Zap,
+  ListChecks,
+  Calendar,
+  TrendingUp,
+  History
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
@@ -41,6 +45,30 @@ const Sidebar = () => {
       icon: BarChart2,
       href: "/analytics",
       active: pathname === "/analytics",
+    },
+    {
+      label: "Daily Missions",
+      icon: ListChecks,
+      href: "/missions",
+      active: pathname === "/missions",
+    },
+    {
+      label: "Exam Countdown",
+      icon: Calendar,
+      href: "/countdown",
+      active: pathname === "/countdown",
+    },
+    {
+      label: "Prediction Engine",
+      icon: TrendingUp,
+      href: "/prediction",
+      active: pathname === "/prediction",
+    },
+    {
+      label: "Schedule History",
+      icon: History,
+      href: "/schedule-history",
+      active: pathname === "/schedule-history",
     },
   ];
 

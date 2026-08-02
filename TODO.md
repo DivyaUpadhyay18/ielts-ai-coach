@@ -1,37 +1,59 @@
-# Low Severity Issues - Fix Status
+# Adaptive Scheduler — Task Tracker
 
-## ✅ Completed - All issues resolved
+## ✅ Approved Plan
 
-### ESLint Issues (react/no-unescaped-entities)
-- [x] **frontend/src/app/not-found.tsx** - Escaped apostrophes
-- [x] **frontend/src/app/dashboard/page.tsx** - Escaped apostrophes
-- [x] **frontend/src/app/page.tsx** - Escaped quotes in JSX
-- [x] **frontend/src/app/speaking/page.tsx** - Escaped quotes in JSX
-- [x] **frontend/src/app/writing/page.tsx** - Escaped quotes in JSX
+> Core feature. Runs at midnight or on app open. Checks yesterday's
+> completions, missed tasks, days-remaining, completion rate. If misses:
+> moves unfinished tasks forward, recalcs workload, protects revision weeks,
+> keeps mocks before exam day, never exceeds daily budget by >20% (unless
+> necessary), shows exactly what changed & why. Every update stored in DB
+> history. Clean architecture. No AI. Production-ready.
 
-### @next/next/no-img-element Warning
-- [x] **frontend/src/components/ui/avatar.tsx** - Replaced `<img>` with `<Image>` from `next/image`
+## 🔲 Steps
 
-### Unused Imports Removed
-- [x] **frontend/src/app/analytics/page.tsx** - Removed unused `TrendingUp` import
-- [x] **frontend/src/app/diagnostic/result/page.tsx** - Removed unused `Target` import
-- [x] **frontend/src/app/signup/page.tsx** - Removed unused `Chrome` import
-- [x] **frontend/src/app/notifications/page.tsx** - Removed unused `Button` import
-- [x] **frontend/src/app/notifications/page.tsx** - Removed unused `Bell, Settings, History, Trash2` imports
-- [x] **frontend/src/app/privacy/page.tsx** - Removed unused `Button` import
-- [x] **frontend/src/app/terms/page.tsx** - Removed unused `Button` import
-- [x] **frontend/src/app/cookies/page.tsx** - Removed unused `Button` import
-- [x] **frontend/src/components/shared/navbar.tsx** - Removed unused `cn` import
-- [x] **frontend/src/components/shared/sidebar.tsx** - Removed unused `History` import
-- [x] **backend/app/services/ielts_service.py** - Removed unused `Dict` import
+### Phase 1 — Database & Models
+- [x] Create `backend/app/db/migrations/009_adaptive_scheduler.sql` (schedule_runs, schedule_adjustments, tasks+source_task_id/missed_at, indexes, RLS, triggers)
+- [x] Create `backend/app/models/scheduler.py` (run request/response schemas, metrics, adjustments, explain response)
 
-### Formatting Inconsistencies Fixed
-- [x] **frontend/src/components/shared/navbar.tsx** - Fixed `navLinks` indentation, `Logo Area` comment indentation, `DropdownItem` indentation
-- [x] **frontend/src/components/shared/sidebar.tsx** - Fixed `routes` indentation
-- [x] **frontend/src/app/writing/page.tsx** - Fixed timer `div` indentation, `Tabs` indentation
-- [x] **frontend/src/app/speaking/page.tsx** - Fixed `button` indentation
-- [x] **frontend/src/app/roadmap/page.tsx** - Fixed `Progress` indentation
-- [x] **frontend/src/app/signup/page.tsx** - Fixed `Input` indentation in all form fields
+### Phase 2 — Repository & Service
+- [x] Create `backend/app/repositories/scheduler_repo.py` (create_run, list_runs, get_latest_run, add_adjustments, get_run_adjustments)
+- [x] Extend `backend/app/repositories/task_repo.py` (list_pending_before, mark_missed, reschedule/clone-with-lineage, list_mock_tasks)
+- [x] Create `backend/app/services/adaptive_scheduler.py` (deterministic rollover service)
+- [x] Update `backend/app/services/__init__.py` (lazy export)
 
-## Result
-- **`npx next lint`** → ✔ No ESLint warnings or errors
+### Phase 3 — API & Wiring
+- [x] Create `backend/app/api/v1/scheduler.py` (POST /run, GET /latest, GET /runs, GET /explain)
+- [x] Update `backend/app/api/deps.py` (+get_scheduler_service, +get_scheduler_repo)
+- [x] Update `backend/app/api/v1/router.py` (register /scheduler)
+- [x] Update `backend/app/main.py` (root endpoint map)
+
+### Phase 4 — Frontend
+- [ ] Update `frontend/src/types/index.ts` (scheduler types)
+- [ ] Update `frontend/src/services/api.ts` (schedulerService)
+- [ ] Update `frontend/src/app/dashboard/page.tsx` ("What changed today" panel)
+
+### Phase 5 — Verification
+- [ ] `python -m py_compile` on changed/new files
+- [ ] `backend/verify_scheduler.py` — standalone checks (stub DB)
+
+
+### Schedule History Feature (NEW)
+- [x] Create backend/app/models/schedule_history.py (Pydantic schemas)
+- [x] Create backend/app/repositories/schedule_history_repo.py (data access)
+- [x] Create backend/app/services/schedule_history_service.py (business logic)
+- [x] Create backend/app/api/v1/schedule_history.py (REST endpoints)
+- [x] Create backend/app/db/migrations/011_schedule_history.sql (DB schema)
+- [x] Create frontend/src/app/schedule-history/page.tsx (history page)
+- [x] Create frontend/src/components/scheduler/scheduler-changes.tsx (changes component)
+- [x] Update frontend/src/types/index.ts (ScheduleHistory types)
+- [x] Update frontend/src/services/api.ts (scheduleHistoryService)
+- [x] Update frontend/src/components/shared/sidebar.tsx (Schedule History link)
+- [x] Update backend/app/api/deps.py (+get_schedule_history_repo, +get_schedule_history_service)
+- [x] Update backend/app/api/v1/router.py (register /schedule-history)
+- [x] Update backend/app/main.py (root endpoint map)
+- [x] Fix previous/new schedule snapshot capture in adaptive_scheduler.py (capture before changes)
+- [x] Add schedule history logging to exam_countdown.py (exam date updates)
+- [x] Add schedule history logging to study_plan_generator.py (plan regeneration)
+- [x] Implement POST /internal/create endpoint in schedule_history.py
+- [x] Create backend/verify_schedule_history.py (verification script)
+- [x] Update SCHEDULE_HISTORY.md (reflect actual implementation)

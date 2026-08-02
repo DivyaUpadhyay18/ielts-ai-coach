@@ -5,10 +5,13 @@ import { useAuthStore } from "@/app/store/useAuthStore";
 
 export function AuthInitializer() {
   const initialize = useAuthStore((state) => state.initialize);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
 
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    if (!isInitialized) {
+      initialize();
+    }
+  }, [initialize, isInitialized]);
 
   return null;
 }
