@@ -644,6 +644,22 @@ import type {
   ResourceCreatePayload,
   ResourceUpdatePayload,
   ResourceStats,
+  ResourceFilters,
+  ResourceSortBy,
+  SortOrder,
+} from '@/types';
+
+// Learning Session service
+import type {
+  SessionStartResponse,
+  SessionProgressUpdate,
+  SessionNoteInput,
+  SessionNote,
+  SessionBookmarkInput,
+  SessionBookmark,
+  SessionCompleteResponse,
+  SessionHistoryResponse,
+  TodaySessionOverview,
 } from '@/types';
 
 export const resourcesService = {
@@ -661,6 +677,11 @@ export const resourcesService = {
     offset?: number;
   }): Promise<ResourceItem[]> => {
     const response = await authApi.get('/resource-management', { params });
+    return response.data;
+  },
+
+  listAdvanced: async (filters?: ResourceFilters): Promise<ResourceItem[]> => {
+    const response = await authApi.get('/resource-management', { params: filters as Record<string, unknown> });
     return response.data;
   },
 
@@ -749,6 +770,117 @@ export const resourcesService = {
     const response = await authApi.post(`/resource-management/${resourceId}/rating`, null, {
       params: { rating },
     });
+    return response.data;
+  },
+
+  getSubSkills: async (skill: string): Promise<string[]> => {
+    const response = await authApi.get(`/resource-management/sub-skills/${skill}`);
+    return response.data;
+  },
+
+  getSources: async (): Promise<string[]> => {
+    const response = await authApi.get('/resource-management/sources');
+    return response.data;
+  },
+
+  getBookmarked: async (limit?: number): Promise<ResourceItem[]> => {
+    const response = await authApi.get('/resource-management/bookmarks', {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  getCompleted: async (limit?: number): Promise<ResourceItem[]> => {
+    const response = await authApi.get('/resource-management/completed', {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  getRecentlyViewed: async (limit?: number): Promise<ResourceItem[]> => {
+    const response = await authApi.get('/resource-management/recently-viewed', {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  recordView: async (resourceId: string): Promise<void> => {
+    await authApi.post(`/resource-management/${resourceId}/view`);
+  },
+
+  recordComplete: async (resourceId: string): Promise<void> => {
+    await authApi.post(`/resource-management/${resourceId}/complete`);
+  },
+
+  checkBookmark: async (resourceId: string): Promise<boolean> => {
+    const response = await authApi.get(`/resource-management/${resourceId}/bookmark-status`);
+    return response.data.is_bookmarked;
+  },
+
+  toggleBookmark: async (resourceId: string, isBookmarked: boolean): Promise<void> => {
+    if (isBookmarked) {
+      await authApi.delete('/resource-bookmarks', { params: { resource_id: resourceId } });
+    } else {
+      await authApi.post('/resource-management/bookmark', { resource_id: resourceId });
+    }
+  },
+};
+
+export const learningSessionsService = {
+  startSession: async (params?: {
+    mission_id?: string;
+    skill?: string;
+  }): Promise<SessionStartResponse> => {
+    const response = await authApi.post('/learning-sessions/start', {}, { params });
+    return response.data;
+  },
+
+  updateProgress: async (
+    missionId: string,
+    data: SessionProgressUpdate
+  ): Promise<any> => {
+    const response = await authApi.post(`/learning-sessions/${missionId}/progress`, data);
+    return response.data;
+  },
+
+  addNote: async (
+    missionId: string,
+    data: SessionNoteInput
+  ): Promise<SessionNote> => {
+    const response = await authApi.post(`/learning-sessions/${missionId}/notes`, data);
+    return response.data;
+  },
+
+  addBookmark: async (
+    missionId: string,
+    data: SessionBookmarkInput
+  ): Promise<SessionBookmark> => {
+    const response = await authApi.post(`/learning-sessions/${missionId}/bookmarks`, data);
+    return response.data;
+  },
+
+  completeSession: async (
+    missionId: string,
+    data?: {
+      notes?: string[];
+      progress?: number;
+      actual_duration_minutes?: number;
+    }
+  ): Promise<SessionCompleteResponse> => {
+    const response = await authApi.post(`/learning-sessions/${missionId}/complete`, data || {});
+    return response.data;
+  },
+
+  getTodayOverview: async (): Promise<TodaySessionOverview> => {
+    const response = await authApi.get('/learning-sessions/today');
+    return response.data;
+  },
+
+  getHistory: async (params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<SessionHistoryResponse> => {
+    const response = await authApi.get('/learning-sessions/history', { params });
     return response.data;
   },
 };

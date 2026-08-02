@@ -146,6 +146,15 @@ async def root():
                 "history": "GET /api/v1/recommendations/history",
                 "track": "POST /api/v1/recommendations/track",
                 "stats": "GET /api/v1/recommendations/stats",
+            },
+            "learning_sessions": {
+                "start": "POST /api/v1/learning-sessions/start",
+                "progress": "POST /api/v1/learning-sessions/{mission_id}/progress",
+                "add_note": "POST /api/v1/learning-sessions/{mission_id}/notes",
+                "bookmark": "POST /api/v1/learning-sessions/{mission_id}/bookmarks",
+                "complete": "POST /api/v1/learning-sessions/{mission_id}/complete",
+                "today": "GET /api/v1/learning-sessions/today",
+                "history": "GET /api/v1/learning-sessions/history",
             }
         }
     }

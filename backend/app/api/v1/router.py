@@ -20,6 +20,7 @@ from app.api.v1.countdown import router as countdown_router
 from app.api.v1.prediction import router as prediction_router
 from app.api.v1.resource_management import router as resource_management_router
 from app.api.v1.recommendation_engine import router as recommendation_router
+from app.api.v1.learning_session import router as learning_session_router
 
 router = APIRouter()
 
@@ -44,3 +45,4 @@ router.include_router(countdown_router, prefix="/countdown", tags=["Exam Countdo
 router.include_router(prediction_router, prefix="/prediction", tags=["Prediction Engine"])
 router.include_router(resource_management_router, prefix="/resource-management", tags=["Resource Management"])
 router.include_router(recommendation_router, prefix="/recommendations", tags=["Intelligent Recommendations"])
+router.include_router(learning_session_router, prefix="/learning-sessions", tags=["Learning Sessions"])

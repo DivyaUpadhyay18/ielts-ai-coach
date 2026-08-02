@@ -761,8 +761,44 @@ export interface ResourceItem {
   is_free: boolean;
   rating?: number;
   popularity_score: number;
+  is_bookmarked?: boolean;
+  is_completed?: boolean;
+  is_viewed?: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+export type ResourceSortBy =
+  | "popularity"
+  | "rating"
+  | "name"
+  | "time"
+  | "duration"
+  | "created";
+
+export type SortOrder = "asc" | "desc";
+
+export interface ResourceFilters {
+  skill?: string;
+  sub_skill?: string;
+  type?: string;
+  difficulty?: string;
+  minimum_band?: number;
+  maximum_band?: number;
+  estimated_time_min?: number;
+  estimated_time_max?: number;
+  source?: string;
+  is_free?: boolean;
+  verified?: boolean;
+  official?: boolean;
+  bookmarks_only?: boolean;
+  completed_only?: boolean;
+  recently_viewed?: boolean;
+  sort_by?: ResourceSortBy;
+  sort_order?: SortOrder;
+  search?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export interface ResourceCreatePayload {
@@ -820,4 +856,135 @@ export interface ResourceStats {
   free_count: number;
   verified_count: number;
   official_count: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Learning Session types (mirrors CRUD /api/v1/learning-sessions/*)
+// ─────────────────────────────────────────────────────────────
+
+export interface DailyMissionInfo {
+  id: string;
+  user_id: string;
+  mission_date: string;
+  skill: string;
+  title: string;
+  estimated_minutes: number;
+  xp_reward: number;
+  completion_percent: number;
+  status: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PreviousMistake {
+  task_id: string;
+  task_title: string;
+  skill: string;
+  mistake_type: string;
+  description: string;
+  created_at?: string | null;
+}
+
+export interface SessionNote {
+  id: string;
+  user_id: string;
+  mission_id?: string | null;
+  resource_id?: string | null;
+  session_id?: string | null;
+  content: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface SessionBookmark {
+  id: string;
+  user_id: string;
+  resource_id: string;
+  mission_id?: string | null;
+  session_id?: string | null;
+  created_at?: string | null;
+}
+
+export interface SessionStartResponse {
+  user_id: string;
+  session_id: string;
+  mission: DailyMissionInfo | null;
+  recommended_resource: ResourceItem | null;
+  related_resources: ResourceItem[];
+  previous_mistakes: PreviousMistake[];
+  notes: SessionNote[];
+  bookmarks: SessionBookmark[];
+  progress_percent: number;
+  estimated_time: number;
+  xp_reward: number;
+  current_band: number | null;
+  target_band: number | null;
+  remaining_days: number | null;
+  created_at?: string | null;
+}
+
+export interface SessionProgressUpdate {
+  progress_percent?: number;
+  status?: 'active' | 'completed' | 'abandoned';
+}
+
+export interface SessionNoteInput {
+  content: string;
+  resource_id?: string;
+}
+
+export interface SessionBookmarkInput {
+  resource_id: string;
+}
+
+export interface SessionCompleteResponse {
+  session_id: string | null;
+  mission_completed: boolean;
+  xp_earned: number;
+  total_xp: number;
+  level: number;
+  level_progress: number;
+  streak_current: number;
+  streak_longest: number;
+  achievements_unlocked: string[];
+  message: string;
+}
+
+export interface SessionHistoryItem {
+  id: string;
+  user_id: string;
+  mission_id: string;
+  session_id?: string | null;
+  status: string;
+  progress_percent: number;
+  started_at?: string | null;
+  completed_at?: string | null;
+  notes_count: number;
+  bookmarked_resources: number;
+  xp_earned: number;
+  metadata: Record<string, any>;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface SessionHistoryResponse {
+  sessions: SessionHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface TodaySessionOverview {
+  user_id: string;
+  date: string;
+  missions: DailyMissionInfo[];
+  sessions: Array<{
+    mission: DailyMissionInfo;
+    session: SessionHistoryItem | null;
+    started: boolean;
+    completed: boolean;
+  }>;
+  total_missions: number;
+  completed: number;
+  in_progress: number;
 }

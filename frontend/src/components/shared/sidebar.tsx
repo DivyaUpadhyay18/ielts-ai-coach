@@ -16,6 +16,7 @@ import {
   TrendingUp,
   History,
   BookOpen,
+  PlayCircle,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
@@ -82,6 +83,12 @@ const Sidebar = () => {
       icon: TrendingUp,
       href: "/recommendations",
       active: pathname === "/recommendations",
+    },
+    {
+      label: "Learning Session",
+      icon: PlayCircle,
+      href: "/learn",
+      active: pathname === "/learn",
     },
   ];
 

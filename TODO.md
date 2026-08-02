@@ -87,4 +87,19 @@
 - [x] Create backend/verify_recommendation_engine.py (verification script - 133 checks)
 - [x] Run verification: all 133 checks passed
 - [x] Run frontend build: all 28 routes compiled successfully
-- [x] Run backend py_compile: all files pass
+- [x] Run backend py_compile: all files pass
+
+### Learning Session Mode (NEW)
+- [x] Create backend/app/db/migrations/014_learning_session.sql (learning_session_notes, learning_session_bookmarks, learning_session_state tables with RLS, indexes, triggers)
+- [x] Create backend/app/models/learning_session.py (Pydantic schemas: SessionStartResponse, SessionNote, SessionBookmark, SessionCompleteRequest/Response, SessionHistoryResponse)
+- [x] Create backend/app/repositories/learning_session_repo.py (session state CRUD, notes, bookmarks, previous mistakes, related resources, session history)
+- [x] Create backend/app/services/learning_session_service.py (start_session, update progress, add note/bookmark, complete_session with XP/streaks/dashboard updates)
+- [x] Create backend/app/api/v1/learning_session.py (REST endpoints: POST /start, POST /{mission_id}/progress, POST /{mission_id}/notes, POST /{mission_id}/bookmarks, POST /{mission_id}/complete, GET /today, GET /history)
+- [x] Update backend/app/api/v1/router.py (register /learning-sessions routes)
+- [x] Update backend/app/main.py (root endpoint map)
+- [x] Update frontend/src/types/index.ts (SessionStartResponse, SessionNote, SessionBookmark, SessionCompleteResponse, etc.)
+- [x] Update frontend/src/services/api.ts (learningSessionsService: startSession, updateProgress, addNote, addBookmark, completeSession, getTodayOverview, getHistory)
+- [x] Create frontend/src/app/learn/page.tsx (interactive learning session page with all UI elements)
+- [x] Update frontend/src/components/shared/sidebar.tsx (Learning Session link)
+- [x] Create LEARNING_SESSION.md (architecture and API documentation)
+- [x] Run verification: py_compile and tsc --noEmit pass

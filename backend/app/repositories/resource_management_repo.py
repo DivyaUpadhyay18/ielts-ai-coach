@@ -242,3 +242,214 @@ class ResourceRepository(BaseRepository):
             "verified_count": verified_count,
             "official_count": official_count,
         }
+
+    # ─── Enhanced Catalog with Advanced Filtering ─────────────────
+
+    SORT_FIELDS = {
+        "name": "title",
+        "rating": "rating",
+        "popularity": "popularity_score",
+        "time": "estimated_time",
+        "created": "created_at",
+        "duration": "estimated_time",
+    }
+
+    def list_catalog_advanced(
+        self,
+        skill: Optional[str] = None,
+        sub_skill: Optional[str] = None,
+        type: Optional[str] = None,
+        difficulty: Optional[str] = None,
+        minimum_band: Optional[float] = None,
+        maximum_band: Optional[float] = None,
+        estimated_time_min: Optional[int] = None,
+        estimated_time_max: Optional[int] = None,
+        source: Optional[str] = None,
+        is_free: Optional[bool] = None,
+        verified: Optional[bool] = None,
+        official: Optional[bool] = None,
+        search: Optional[str] = None,
+        sort_by: Optional[str] = "popularity",
+        sort_order: str = "desc",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """List resources with comprehensive filters and sorting."""
+        query = self._table().select("*")
+
+        if skill:
+            query = query.eq("skill", skill)
+        if sub_skill:
+            query = query.eq("sub_skill", sub_skill)
+        if type:
+            query = query.eq("type", type)
+        if difficulty:
+            query = query.eq("difficulty", difficulty)
+        if minimum_band is not None:
+            query = query.gte("minimum_band", minimum_band)
+        if maximum_band is not None:
+            query = query.lte("maximum_band", maximum_band)
+        if estimated_time_min is not None:
+            query = query.gte("estimated_time", estimated_time_min)
+        if estimated_time_max is not None:
+            query = query.lte("estimated_time", estimated_time_max)
+        if source:
+            query = query.eq("source", source)
+        if is_free is not None:
+            query = query.eq("is_free", is_free)
+        if verified is not None:
+            query = query.eq("verified", verified)
+        if official is not None:
+            query = query.eq("official", official)
+        if search:
+            query = query.or_(
+                f"title.ilike.%{search}%",
+                f"description.ilike.%{search}%",
+            )
+
+        sort_column = self.SORT_FIELDS.get(sort_by or "popularity", "popularity_score")
+        if sort_order == "asc":
+            query = query.order(sort_column)
+        else:
+            query = query.order(sort_column, desc=True)
+
+        query = query.limit(limit).offset(offset)
+
+        result = self._execute(query, "list catalog with advanced filters")
+        return result.data or []
+
+    def get_sub_skills(self, skill: str) -> List[str]:
+        """Get all unique sub_skills for a given skill."""
+        query = (
+            self._table()
+            .select("sub_skill")
+            .eq("skill", skill)
+            .neq("sub_skill", None)
+            .order("sub_skill")
+        )
+        result = self._execute(query, "get sub-skills")
+        return list(
+            dict.fromkeys(
+                row.get("sub_skill") for row in (result.data or [])
+                if row.get("sub_skill")
+            )
+        )
+
+    def get_sources(self) -> List[str]:
+        """Get all unique sources."""
+        query = (
+            self._table()
+            .select("source")
+            .neq("source", None)
+            .order("source")
+        )
+        result = self._execute(query, "get sources")
+        return list(
+            dict.fromkeys(
+                row.get("source") for row in (result.data or [])
+                if row.get("source")
+            )
+        )
+
+    # ─── User-Specific Views ───────────────────────────────────────
+
+    def record_view(self, user_id: str, resource_id: str) -> None:
+        """Record that a user viewed a resource (for recently viewed tracking)."""
+        payload = {
+            "user_id": user_id,
+            "resource_id": resource_id,
+            "viewed": True,
+        }
+        query = self.db.table("recommendation_resource_view").upsert(
+            payload,
+            on_conflict="user_id:resource_id",
+        )
+        try:
+            self._execute(query, "record resource view")
+        except Exception:
+            pass
+
+    def record_completion(self, user_id: str, resource_id: str) -> None:
+        """Record that a user completed a resource."""
+        payload = {
+            "user_id": user_id,
+            "resource_id": resource_id,
+            "viewed": True,
+            "completed": True,
+        }
+        query = self.db.table("recommendation_resource_view").upsert(
+            payload,
+            on_conflict="user_id:resource_id",
+        )
+        try:
+            self._execute(query, "record resource completion")
+        except Exception:
+            pass
+
+    def get_bookmarked(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get a user's bookmarked resources with resource details."""
+        query = (
+            self.db.table("resource_bookmarks")
+            .select("resource_id, created_at, resources(*)")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        result = self._execute(query, "get bookmarked resources")
+        return [
+            dict(row.get("resources") or {}, bookmarked_at=row.get("created_at"))
+            for row in (result.data or [])
+            if row.get("resources")
+        ]
+
+    def get_completed(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get a user's completed resources with resource details."""
+        query = (
+            self.db.table("recommendation_resource_view")
+            .select("resource_id, completed_at, resources(*)")
+            .eq("user_id", user_id)
+            .eq("completed", True)
+            .order("updated_at", desc=True)
+            .limit(limit)
+        )
+        result = self._execute(query, "get completed resources")
+        return [
+            dict(row.get("resources") or {}, completed_at=row.get("completed_at"))
+            for row in (result.data or [])
+            if row.get("resources")
+        ]
+
+    def get_recently_viewed(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get a user's recently viewed resources with resource details."""
+        query = (
+            self.db.table("recommendation_resource_view")
+            .select("resource_id, viewed, completed, updated_at, resources(*)")
+            .eq("user_id", user_id)
+            .eq("viewed", True)
+            .order("updated_at", desc=True)
+            .limit(limit)
+        )
+        result = self._execute(query, "get recently viewed resources")
+        return [
+            dict(row.get("resources") or {}, viewed=True, completed=row.get("completed", False))
+            for row in (result.data or [])
+            if row.get("resources")
+        ]
+
+    def get_bookmarked_ids(self, user_id: str) -> List[str]:
+        """Get just the resource IDs that a user has bookmarked."""
+        query = (
+            self.db.table("resource_bookmarks")
+            .select("resource_id")
+            .eq("user_id", user_id)
+        )
+        result = self._execute(query, "get bookmarked resource IDs")
+        return [row.get("resource_id") for row in (result.data or []) if row.get("resource_id")]
+
+    def get_user_resource_flags(self, user_id: str) -> Dict[str, List[str]]:
+        """Get all user resource flags (bookmarked, completed, viewed IDs)."""
+        return {
+            "bookmarked": self.get_bookmarked_ids(user_id),
+            "completed": [],
+            "viewed": [],
+        }
