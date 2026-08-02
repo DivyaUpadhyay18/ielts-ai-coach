@@ -126,6 +126,26 @@ async def root():
                 "update_action": "PATCH /api/v1/schedule-history/{history_id}/action",
                 "stats": "GET /api/v1/schedule-history/stats/summary",
                 "latest": "GET /api/v1/schedule-history/latest",
+            },
+            "resource_management": {
+                "list": "GET /api/v1/resource-management",
+                "search": "GET /api/v1/resource-management/search",
+                "get": "GET /api/v1/resource-management/{resource_id}",
+                "create": "POST /api/v1/resource-management",
+                "update": "PATCH /api/v1/resource-management/{resource_id}",
+                "delete": "DELETE /api/v1/resource-management/{resource_id}",
+                "stats": "GET /api/v1/resource-management/stats",
+                "by_skill": "GET /api/v1/resource-management/by-skill/{skill}",
+                "by_type": "GET /api/v1/resource-management/by-type/{type}",
+                "verified": "GET /api/v1/resource-management/verified",
+                "official": "GET /api/v1/resource-management/official",
+                "free": "GET /api/v1/resource-management/free",
+            },
+            "recommendation_engine": {
+                "get": "GET /api/v1/recommendations",
+                "history": "GET /api/v1/recommendations/history",
+                "track": "POST /api/v1/recommendations/track",
+                "stats": "GET /api/v1/recommendations/stats",
             }
         }
     }

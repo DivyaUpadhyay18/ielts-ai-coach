@@ -728,3 +728,96 @@ export interface ScheduleHistoryStats {
   total_adjustments: number;
   total_tasks_affected: number;
 }
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Resource Management types (mirrors CRUD /api/v1/resource-management/*)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export type ResourceType = 'Video' | 'PDF' | 'Website' | 'Quiz' | 'Flashcard';
+
+export type ResourceSkill = 'Reading' | 'Listening' | 'Writing' | 'Speaking' | 'Vocabulary' | 'Grammar';
+
+export type ResourceDifficulty = 'beginner' | 'intermediate' | 'advanced' | 'all_levels';
+
+export interface ResourceItem {
+  id: string;
+  title: string;
+  description?: string;
+  type: ResourceType;
+  source?: string;
+  author?: string;
+  url?: string;
+  thumbnail?: string;
+  skill: ResourceSkill;
+  sub_skill?: string;
+  minimum_band?: number;
+  maximum_band?: number;
+  difficulty?: ResourceDifficulty;
+  estimated_time?: number;
+  tags: string[];
+  language: string;
+  verified: boolean;
+  official: boolean;
+  is_free: boolean;
+  rating?: number;
+  popularity_score: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ResourceCreatePayload {
+  title: string;
+  description?: string;
+  type: ResourceType;
+  source?: string;
+  author?: string;
+  url?: string;
+  thumbnail?: string;
+  skill: ResourceSkill;
+  sub_skill?: string;
+  minimum_band?: number;
+  maximum_band?: number;
+  difficulty?: ResourceDifficulty;
+  estimated_time?: number;
+  tags?: string[];
+  language?: string;
+  verified?: boolean;
+  official?: boolean;
+  is_free?: boolean;
+  rating?: number;
+  popularity_score?: number;
+}
+
+export interface ResourceUpdatePayload {
+  title?: string;
+  description?: string;
+  type?: ResourceType;
+  source?: string;
+  author?: string;
+  url?: string;
+  thumbnail?: string;
+  skill?: ResourceSkill;
+  sub_skill?: string;
+  minimum_band?: number;
+  maximum_band?: number;
+  difficulty?: ResourceDifficulty;
+  estimated_time?: number;
+  tags?: string[];
+  language?: string;
+  verified?: boolean;
+  official?: boolean;
+  is_free?: boolean;
+  rating?: number;
+  popularity_score?: number;
+}
+
+export interface ResourceStats {
+  total_resources: number;
+  by_type: Record<string, number>;
+  by_skill: Record<string, number>;
+  by_difficulty: Record<string, number>;
+  avg_rating: number | null;
+  free_count: number;
+  verified_count: number;
+  official_count: number;
+}

@@ -638,5 +638,120 @@ export const scheduleHistoryService = {
   },
 };
 
+// Resource Management service
+import type {
+  ResourceItem,
+  ResourceCreatePayload,
+  ResourceUpdatePayload,
+  ResourceStats,
+} from '@/types';
+
+export const resourcesService = {
+  list: async (params?: {
+    skill?: string;
+    type?: string;
+    difficulty?: string;
+    minimum_band?: number;
+    maximum_band?: number;
+    is_free?: boolean;
+    verified?: boolean;
+    official?: boolean;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ResourceItem[]> => {
+    const response = await authApi.get('/resource-management', { params });
+    return response.data;
+  },
+
+  get: async (resourceId: string): Promise<ResourceItem> => {
+    const response = await authApi.get(`/resource-management/${resourceId}`);
+    return response.data;
+  },
+
+  create: async (data: ResourceCreatePayload): Promise<ResourceItem> => {
+    const response = await authApi.post('/resource-management', data);
+    return response.data;
+  },
+
+  update: async (resourceId: string, data: ResourceUpdatePayload): Promise<ResourceItem> => {
+    const response = await authApi.patch(`/resource-management/${resourceId}`, data);
+    return response.data;
+  },
+
+  delete: async (resourceId: string): Promise<void> => {
+    await authApi.delete(`/resource-management/${resourceId}`);
+  },
+
+  search: async (params?: {
+    skill?: string;
+    type?: string;
+    difficulty?: string;
+    minimum_band?: number;
+    maximum_band?: number;
+    is_free?: boolean;
+    verified?: boolean;
+    official?: boolean;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ResourceItem[]> => {
+    const response = await authApi.get('/resource-management/search', { params });
+    return response.data;
+  },
+
+  getStats: async (): Promise<ResourceStats> => {
+    const response = await authApi.get('/resource-management/stats');
+    return response.data;
+  },
+
+  getBySkill: async (skill: string, limit?: number): Promise<ResourceItem[]> => {
+    const response = await authApi.get(`/resource-management/by-skill/${skill}`, {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  getByType: async (type: string, limit?: number): Promise<ResourceItem[]> => {
+    const response = await authApi.get(`/resource-management/by-type/${type}`, {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  getVerified: async (limit?: number): Promise<ResourceItem[]> => {
+    const response = await authApi.get('/resource-management/verified', {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  getOfficial: async (limit?: number): Promise<ResourceItem[]> => {
+    const response = await authApi.get('/resource-management/official', {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  getFree: async (limit?: number): Promise<ResourceItem[]> => {
+    const response = await authApi.get('/resource-management/free', {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  incrementPopularity: async (resourceId: string): Promise<ResourceItem> => {
+    const response = await authApi.post(`/resource-management/${resourceId}/popularity`);
+    return response.data;
+  },
+
+  updateRating: async (resourceId: string, rating: number): Promise<ResourceItem> => {
+    const response = await authApi.post(`/resource-management/${resourceId}/rating`, null, {
+      params: { rating },
+    });
+    return response.data;
+  },
+};
+
 export { authApi, api };
 export default api;

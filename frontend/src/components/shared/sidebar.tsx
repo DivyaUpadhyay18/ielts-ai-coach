@@ -14,7 +14,8 @@ import {
   ListChecks,
   Calendar,
   TrendingUp,
-  History
+  History,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
@@ -69,6 +70,18 @@ const Sidebar = () => {
       icon: History,
       href: "/schedule-history",
       active: pathname === "/schedule-history",
+    },
+    {
+      label: "Resource Library",
+      icon: BookOpen,
+      href: "/resources",
+      active: pathname === "/resources",
+    },
+    {
+      label: "Recommendations",
+      icon: TrendingUp,
+      href: "/recommendations",
+      active: pathname === "/recommendations",
     },
   ];
 

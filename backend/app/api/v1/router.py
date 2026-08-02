@@ -18,6 +18,8 @@ from app.api.v1.scheduler import router as scheduler_router
 from app.api.v1.schedule_history import router as schedule_history_router
 from app.api.v1.countdown import router as countdown_router
 from app.api.v1.prediction import router as prediction_router
+from app.api.v1.resource_management import router as resource_management_router
+from app.api.v1.recommendation_engine import router as recommendation_router
 
 router = APIRouter()
 
@@ -40,3 +42,5 @@ router.include_router(scheduler_router, prefix="/scheduler", tags=["Adaptive Sch
 router.include_router(schedule_history_router, prefix="/schedule-history", tags=["Schedule History"])
 router.include_router(countdown_router, prefix="/countdown", tags=["Exam Countdown"])
 router.include_router(prediction_router, prefix="/prediction", tags=["Prediction Engine"])
+router.include_router(resource_management_router, prefix="/resource-management", tags=["Resource Management"])
+router.include_router(recommendation_router, prefix="/recommendations", tags=["Intelligent Recommendations"])

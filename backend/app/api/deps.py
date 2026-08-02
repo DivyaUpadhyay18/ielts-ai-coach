@@ -106,7 +106,7 @@ from app.repositories.study_plan_repo import StudyPlanRepository
 from app.repositories.daily_plan_repo import DailyPlanRepository
 from app.repositories.daily_mission_repo import DailyMissionRepository
 from app.repositories.task_repo import TaskRepository
-from app.repositories.resource_repo import ResourceRepository
+from app.repositories.resource_management_repo import ResourceRepository as ResourceManagementRepository
 from app.repositories.progress_repo import ProgressRepository
 from app.repositories.achievement_repo import AchievementRepository
 from app.repositories.notification_repo import NotificationRepository
@@ -183,6 +183,10 @@ def get_schedule_history_repo() -> ScheduleHistoryRepository:
 
 def get_schedule_history_service() -> ScheduleHistoryService:
     return schedule_history_service
+
+
+def get_resource_management_repo() -> ResourceManagementRepository:
+    return ResourceManagementRepository(db_session)
 
 
 def get_exam_countdown_service() -> ExamCountdownService:
