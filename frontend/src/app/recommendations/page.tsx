@@ -30,8 +30,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { resourcesService } from "@/services/api";
-import type { ResourceItem } from "@/types";
+import { recommendationService } from "@/services/api";
+import type { RecommendationResponse, RecommendationItem, RecommendedResource } from "@/types";
 
 type ResourceType = "Video" | "PDF" | "Website" | "Quiz" | "Flashcard";
 type ResourceSkill = "Reading" | "Listening" | "Writing" | "Speaking" | "Vocabulary" | "Grammar";
@@ -92,7 +92,7 @@ function RecommendedResourceCard({
   rationale,
   factors,
 }: {
-  resource: ResourceItem;
+  resource: RecommendedResource;
   score: number;
   rationale: string;
   factors?: Record<string, any>;
@@ -105,9 +105,9 @@ function RecommendedResourceCard({
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <ResourceTypeIcon type={resource.type} />
-              <SkillBadge skill={resource.skill} />
-              <DifficultyBadge difficulty={resource.difficulty} />
+              <ResourceTypeIcon type={resource.type as ResourceType} />
+              <SkillBadge skill={resource.skill as ResourceSkill} />
+              <DifficultyBadge difficulty={resource.difficulty as ResourceDifficulty} />
               <ScoreBadge score={score} />
               {resource.verified && <Badge variant="success" className="text-xs"><ShieldCheck className="h-3 w-3 mr-1" />Verified</Badge>}
               {resource.official && <Badge variant="default" className="text-xs"><Crown className="h-3 w-3 mr-1" />Official</Badge>}
@@ -178,13 +178,13 @@ function RecommendedResourceCard({
 export default function RecommendationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);  const [searchQuery, setSearchQuery] = useState("");
   const [filterSkill, setFilterSkill] = useState<string>("");
   const [filterType, setFilterType] = useState<string>("");
   const [limit, setLimit] = useState(10);
   const [showFilters, setShowFilters] = useState(false);
   const [contextInfo, setContextInfo] = useState<any>(null);
+  const [totalCandidates, setTotalCandidates] = useState(0);
 
   const fetchRecommendations = useCallback(async () => {
     setLoading(true);
@@ -192,10 +192,19 @@ export default function RecommendationsPage() {
     try {
       const params: Record<string, any> = { limit };
       if (filterSkill) params.skill = filterSkill;
-      if (filterType) params.type = filterType;
-      if (searchQuery) params.search = searchQuery;
+      if (filterType) params.resource_type = filterType;
+      if (searchQuery) params.skill = searchQuery;
 
-      setRecommendations([]);
+      const data: RecommendationResponse = await recommendationService.getRecommendations(params);
+      setRecommendations(data.recommendations || []);
+      setContextInfo({
+        current_band: data.current_band,
+        target_band: data.target_band,
+        weakest_skill: data.weakest_skill,
+        today_mission_skill: data.today_mission_skill,
+        remaining_days: data.remaining_days,
+      });
+      setTotalCandidates(data.metadata?.total_candidates ?? 0);
     } catch (err: any) {
       setError(err?.response?.data?.detail?.message || err?.message || "Failed to load recommendations");
     } finally {

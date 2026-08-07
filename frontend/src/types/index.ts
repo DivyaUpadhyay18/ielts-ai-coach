@@ -764,6 +764,7 @@ export interface ResourceItem {
   is_bookmarked?: boolean;
   is_completed?: boolean;
   is_viewed?: boolean;
+  is_favorited?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -794,6 +795,7 @@ export interface ResourceFilters {
   bookmarks_only?: boolean;
   completed_only?: boolean;
   recently_viewed?: boolean;
+  favorites_only?: boolean;
   sort_by?: ResourceSortBy;
   sort_order?: SortOrder;
   search?: string;
@@ -856,6 +858,63 @@ export interface ResourceStats {
   free_count: number;
   verified_count: number;
   official_count: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Band Estimation types (mirrors POST/GET /api/v1/band-estimation/*)
+// ─────────────────────────────────────────────────────────────
+
+export interface BandEstimationInput {
+  reading: number;
+  listening: number;
+  writing: number;
+  speaking: number;
+  vocabulary: number;
+  grammar: number;
+}
+
+export interface SkillBand {
+  skill: string;
+  band: number;
+  explanation: string;
+}
+
+export interface BandEstimationResponse {
+  user_id: string;
+  generated_at: string;
+  run_date: string;
+  overall_band: number;
+  confidence_score: number;
+  confidence_label: "low" | "medium" | "high" | "very_high";
+  skill_bands: Record<string, number>;
+  weakest_skills: string[];
+  strongest_skills: string[];
+  explanations: Record<string, string>;
+  formulas: Record<string, string>;
+  raw_input: Record<string, number>;
+}
+
+export interface BandEstimationHistoryItem {
+  id: string;
+  user_id: string;
+  run_date: string;
+  generated_at: string;
+  created_at?: string;
+  overall_band: number;
+  confidence_score: number;
+  confidence_label: string;
+  skill_bands: Record<string, number>;
+  weakest_skills: string[];
+  strongest_skills: string[];
+  explanations: Record<string, string>;
+  raw_input: Record<string, any>;
+}
+
+export interface BandEstimationHistoryResponse {
+  items: BandEstimationHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -987,4 +1046,127 @@ export interface TodaySessionOverview {
   total_missions: number;
   completed: number;
   in_progress: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Study Plan types (mirrors /api/v1/study-plans/*)
+// ─────────────────────────────────────────────────────────────
+
+export interface StudyPlanGenerateRequest {
+  exam_date: string;
+  current_band: number;
+  target_band: number;
+  daily_minutes_budget?: number;
+  module?: 'academic' | 'general';
+  weakest_skills?: string[];
+  strongest_skills?: string[];
+  start_date?: string | null;
+}
+
+export interface DiagnosticStudyPlanRequest {
+  exam_date?: string | null;
+  daily_minutes_budget?: number;
+  module?: 'academic' | 'general';
+  target_band?: number | null;
+  start_date?: string | null;
+}
+
+export interface GeneratedTask {
+  title: string;
+  skill: string;
+  task_type: string;
+  duration_minutes: number;
+  priority: number;
+  xp_reward: number;
+  difficulty: number;
+  is_mandatory: boolean;
+}
+
+export interface GeneratedDay {
+  plan_date: string;
+  phase_index: number;
+  is_revision_day: boolean;
+  is_mock_day: boolean;
+  is_rest_day: boolean;
+  xp_reward: number;
+  total_minutes: number;
+  tasks: GeneratedTask[];
+}
+
+export interface PhaseBreakdown {
+  key: string;
+  label: string;
+  weight: number;
+  start_date: string;
+  end_date: string;
+  days: number;
+}
+
+export interface StudyPlanGenerateResponse {
+  study_plan_id: string;
+  version: number;
+  title: string;
+  target_band: number;
+  start_band: number;
+  total_weeks: number;
+  start_date: string;
+  exam_date: string;
+  total_days: number;
+  phase_breakdown: PhaseBreakdown[];
+  days: GeneratedDay[];
+  total_tasks: number;
+  total_xp: number;
+  generated_at: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Recommendation Engine types (mirrors /api/v1/recommendations/*)
+// ─────────────────────────────────────────────────────────────
+
+export interface RecommendedResource {
+  id: string;
+  title: string;
+  description?: string;
+  type: string;
+  source?: string;
+  author?: string;
+  url?: string;
+  thumbnail?: string;
+  skill: string;
+  sub_skill?: string;
+  minimum_band?: number;
+  maximum_band?: number;
+  difficulty?: string;
+  estimated_time?: number;
+  tags: string[];
+  language: string;
+  verified: boolean;
+  official: boolean;
+  is_free: boolean;
+  rating?: number;
+  popularity_score: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface RecommendationItem {
+  resource: RecommendedResource;
+  score: number;
+  relevance_factors: Record<string, any>;
+  rationale: string;
+}
+
+export interface RecommendationResponse {
+  user_id: string;
+  run_date: string;
+  current_band: number;
+  target_band: number;
+  weakest_skill: string | null;
+  today_mission_skill: string | null;
+  sub_skill: string | null;
+  estimated_time: number;
+  remaining_days: number | null;
+  recommendations: RecommendationItem[];
+  ranking_algorithm: string;
+  metadata: Record<string, any>;
 }

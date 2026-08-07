@@ -253,6 +253,92 @@ export const onboardingService = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────
+// Study Plan service (mirrors /api/v1/study-plans/*)
+// ─────────────────────────────────────────────────────────────
+import type {
+  StudyPlanGenerateRequest,
+  DiagnosticStudyPlanRequest,
+  StudyPlanGenerateResponse,
+} from '@/types';
+
+export const studyPlanService = {
+  generate: async (data: StudyPlanGenerateRequest): Promise<StudyPlanGenerateResponse> => {
+    const response = await authApi.post('/study-plans/generate', data);
+    return response.data;
+  },
+
+  generateFromDiagnostic: async (
+    data: DiagnosticStudyPlanRequest
+  ): Promise<StudyPlanGenerateResponse> => {
+    const response = await authApi.post('/study-plans/generate-from-diagnostic', data);
+    return response.data;
+  },
+
+  getPlanDays: async (
+    planId: string,
+    params?: { fromDate?: string; toDate?: string }
+  ): Promise<any> => {
+    const response = await authApi.get(`/study-plans/${planId}/days`, { params });
+    return response.data;
+  },
+
+  getActivePlan: async (): Promise<any> => {
+    const response = await authApi.get('/study-plans/active');
+    return response.data;
+  },
+
+  listPlans: async (): Promise<any[]> => {
+    const response = await authApi.get('/study-plans');
+    return response.data;
+  },
+};
+
+// ─────────────────────────────────────────────────────────────
+// Recommendation Engine service (mirrors /api/v1/recommendations/*)
+// ─────────────────────────────────────────────────────────────
+import type {
+  RecommendationResponse,
+  RecommendationItem,
+} from '@/types';
+
+export const recommendationService = {
+  getRecommendations: async (params?: {
+    skill?: string;
+    sub_skill?: string;
+    resource_type?: string;
+    limit?: number;
+    include_completed?: boolean;
+    only_verified?: boolean;
+  }): Promise<RecommendationResponse> => {
+    const response = await authApi.get('/recommendations', { params });
+    return response.data;
+  },
+
+  getHistory: async (params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<any[]> => {
+    const response = await authApi.get('/recommendations/history', { params });
+    return response.data;
+  },
+
+  track: async (data: {
+    resource_id: string;
+    recommendation_log_id?: string;
+    action: 'viewed' | 'clicked' | 'completed';
+    session_id?: string;
+  }): Promise<any> => {
+    const response = await authApi.post('/recommendations/track', data);
+    return response.data;
+  },
+
+  getStats: async (): Promise<any> => {
+    const response = await authApi.get('/recommendations/stats');
+    return response.data;
+  },
+};
+
 // Dashboard service
 import type { DashboardOverview } from '@/types';
 
@@ -647,7 +733,15 @@ import type {
   ResourceFilters,
   ResourceSortBy,
   SortOrder,
+  BandEstimationInput,
+  BandEstimationResponse,
+  BandEstimationHistoryItem,
+  BandEstimationHistoryResponse,
 } from '@/types';
+import type {
+  ResourceSuggestion,
+  ResourceSuggestionCreatePayload,
+} from '@/types/admin';
 
 // Learning Session service
 import type {
@@ -824,6 +918,71 @@ export const resourcesService = {
       await authApi.post('/resource-management/bookmark', { resource_id: resourceId });
     }
   },
+
+// ─── Community Suggestions ─────────────────────────────────
+  submitSuggestion: async (data: ResourceSuggestionCreatePayload): Promise<ResourceSuggestion> => {
+    const response = await authApi.post('/resource-management/suggestions', data);
+    return response.data;
+  },
+
+  getMySuggestions: async (params?: { limit?: number; offset?: number }): Promise<ResourceSuggestion[]> => {
+    const response = await authApi.get('/resource-management/suggestions/mine', { params });
+    return response.data;
+  },
+
+  getCommunitySuggestions: async (params?: {
+    category?: string;
+    skill?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ResourceSuggestion[]> => {
+    const response = await authApi.get('/resource-management/suggestions/community', { params });
+    return response.data;
+  },
+
+  voteSuggestion: async (suggestionId: string): Promise<{ suggestion_id: string; votes: number; voted: boolean }> => {
+    const response = await authApi.post(`/resource-management/suggestions/${suggestionId}/vote`);
+    return response.data;
+  },
+
+  unvoteSuggestion: async (suggestionId: string): Promise<{ suggestion_id: string; votes: number; voted: boolean }> => {
+    const response = await authApi.delete(`/resource-management/suggestions/${suggestionId}/vote`);
+    return response.data;
+  },
+
+  // Favorites (client-side persistence via localStorage)
+  // In production, this would be backed by a resource_favorites table
+  getFavoriteIds: (): string[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('ielts_resource_favorites');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  isFavorited: (resourceId: string): boolean => {
+    return resourcesService.getFavoriteIds().includes(resourceId);
+  },
+
+  toggleFavorite: (resourceId: string, isFavorited: boolean): void => {
+    if (typeof window === 'undefined') return;
+    try {
+      const favorites = resourcesService.getFavoriteIds();
+      if (isFavorited) {
+        const updated = favorites.filter((id) => id !== resourceId);
+        localStorage.setItem('ielts_resource_favorites', JSON.stringify(updated));
+      } else {
+        if (!favorites.includes(resourceId)) {
+          favorites.push(resourceId);
+          localStorage.setItem('ielts_resource_favorites', JSON.stringify(favorites));
+        }
+      }
+    } catch {
+      // Silently fail - localStorage might be unavailable
+    }
+  },
 };
 
 export const learningSessionsService = {
@@ -881,6 +1040,464 @@ export const learningSessionsService = {
     offset?: number;
   }): Promise<SessionHistoryResponse> => {
     const response = await authApi.get('/learning-sessions/history', { params });
+    return response.data;
+  },
+};
+
+// Band Estimation service
+export const bandEstimationService = {
+  estimate: async (data: BandEstimationInput): Promise<BandEstimationResponse> => {
+    const response = await authApi.post('/band-estimation', data);
+    return response.data;
+  },
+
+  getLatest: async (): Promise<BandEstimationResponse> => {
+    const response = await authApi.get('/band-estimation/latest');
+    return response.data;
+  },
+
+  getHistory: async (params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<BandEstimationHistoryResponse> => {
+    const response = await authApi.get('/band-estimation/history', { params });
+    return response.data;
+  },
+};
+
+// Analytics service
+import type {
+  AnalyticsDashboardResponse,
+  AnalyticsEvent,
+  AnalyticsEventCreate,
+  AnalyticsSummary,
+  AnalyticsTrendPoint,
+  SkillBreakdown,
+  ResourcePerformanceItem,
+  ResourceAnalytics,
+  UserAnalytics,
+  ResourceRatingCreate,
+} from '@/types/analytics';
+
+export const analyticsService = {
+  // Event tracking
+  trackEvent: async (data: AnalyticsEventCreate): Promise<AnalyticsEvent> => {
+    const response = await authApi.post('/analytics/events', data);
+    return response.data;
+  },
+
+  trackEventsBatch: async (events: AnalyticsEventCreate[]): Promise<AnalyticsEvent[]> => {
+    const response = await authApi.post('/analytics/events/batch', { events });
+    return response.data;
+  },
+
+  // Resource interactions
+  recordView: async (resourceId: string): Promise<void> => {
+    await authApi.post(`/analytics/resources/${resourceId}/view`);
+  },
+
+  recordComplete: async (resourceId: string): Promise<void> => {
+    await authApi.post(`/analytics/resources/${resourceId}/complete`);
+  },
+
+  recordBookmark: async (resourceId: string): Promise<void> => {
+    await authApi.post(`/analytics/resources/${resourceId}/bookmark`);
+  },
+
+  removeBookmark: async (resourceId: string): Promise<void> => {
+    await authApi.delete(`/analytics/resources/${resourceId}/bookmark`);
+  },
+
+  toggleLike: async (resourceId: string): Promise<{ liked: boolean; resource_id: string }> => {
+    const response = await authApi.post(`/analytics/resources/${resourceId}/like`);
+    return response.data;
+  },
+
+  rateResource: async (resourceId: string, rating: number): Promise<any> => {
+    const response = await authApi.post(`/analytics/resources/${resourceId}/rate`, {
+      resource_id: resourceId,
+      rating,
+    });
+    return response.data;
+  },
+
+  recordStudySession: async (params: {
+    minutes: number;
+    skill?: string;
+    source_type?: string;
+    source_id?: string;
+  }): Promise<void> => {
+    await authApi.post('/analytics/study-sessions', null, { params });
+  },
+
+  // Dashboard reads
+  getDashboard: async (days = 30): Promise<AnalyticsDashboardResponse> => {
+    const response = await authApi.get('/analytics/dashboard', { params: { days } });
+    return response.data;
+  },
+
+  getSummary: async (): Promise<AnalyticsSummary> => {
+    const response = await authApi.get('/analytics/summary');
+    return response.data;
+  },
+
+  getTrends: async (days = 30): Promise<AnalyticsTrendPoint[]> => {
+    const response = await authApi.get('/analytics/trends', { params: { days } });
+    return response.data;
+  },
+
+  getSkills: async (): Promise<SkillBreakdown[]> => {
+    const response = await authApi.get('/analytics/skills');
+    return response.data;
+  },
+
+  getTopResources: async (limit = 10): Promise<ResourcePerformanceItem[]> => {
+    const response = await authApi.get('/analytics/resources/top', { params: { limit } });
+    return response.data;
+  },
+
+  getResourceAnalytics: async (resourceId: string): Promise<ResourceAnalytics> => {
+    const response = await authApi.get(`/analytics/resources/${resourceId}`);
+    return response.data;
+  },
+
+  getEvents: async (params?: {
+    limit?: number;
+    event?: string;
+    entity_type?: string;
+  }): Promise<AnalyticsEvent[]> => {
+    const response = await authApi.get('/analytics/events', { params });
+    return response.data;
+  },
+
+  getMyAnalytics: async (): Promise<UserAnalytics> => {
+    const response = await authApi.get('/analytics/me');
+    return response.data;
+  },
+};
+
+// Resource Notes service
+import type {
+  ResourceNote,
+  ResourceNoteCreate,
+  ResourceNoteUpdate,
+  ResourceNoteListResponse,
+  ResourceHighlight,
+  ResourceHighlightCreate,
+  ResourceHighlightListResponse,
+  RevisionReminder,
+  RevisionReminderCreate,
+  RevisionReminderUpdate,
+  RevisionReminderListResponse,
+  ResourceNoteStats,
+} from '@/types/resource-notes';
+
+export const resourceNotesService = {
+  // Notes
+  createNote: async (data: ResourceNoteCreate): Promise<ResourceNote> => {
+    const response = await authApi.post('/resource-notes/notes', data);
+    return response.data;
+  },
+
+  listNotes: async (params?: { resource_id?: string; search?: string }): Promise<ResourceNoteListResponse> => {
+    const response = await authApi.get('/resource-notes/notes', { params });
+    return response.data;
+  },
+
+  getNote: async (noteId: string): Promise<ResourceNote> => {
+    const response = await authApi.get(`/resource-notes/notes/${noteId}`);
+    return response.data;
+  },
+
+  updateNote: async (noteId: string, data: ResourceNoteUpdate): Promise<ResourceNote> => {
+    const response = await authApi.patch(`/resource-notes/notes/${noteId}`, data);
+    return response.data;
+  },
+
+  deleteNote: async (noteId: string): Promise<void> => {
+    await authApi.delete(`/resource-notes/notes/${noteId}`);
+  },
+
+  // Highlights
+  createHighlight: async (data: ResourceHighlightCreate): Promise<ResourceHighlight> => {
+    const response = await authApi.post('/resource-notes/highlights', data);
+    return response.data;
+  },
+
+  listHighlights: async (params?: { resource_id?: string }): Promise<ResourceHighlightListResponse> => {
+    const response = await authApi.get('/resource-notes/highlights', { params });
+    return response.data;
+  },
+
+  deleteHighlight: async (highlightId: string): Promise<void> => {
+    await authApi.delete(`/resource-notes/highlights/${highlightId}`);
+  },
+
+  // Revision Reminders
+  createReminder: async (data: RevisionReminderCreate): Promise<RevisionReminder> => {
+    const response = await authApi.post('/resource-notes/reminders', data);
+    return response.data;
+  },
+
+  listReminders: async (params?: { upcoming_only?: boolean }): Promise<RevisionReminderListResponse> => {
+    const response = await authApi.get('/resource-notes/reminders', { params });
+    return response.data;
+  },
+
+  updateReminder: async (reminderId: string, data: RevisionReminderUpdate): Promise<RevisionReminder> => {
+    const response = await authApi.patch(`/resource-notes/reminders/${reminderId}`, data);
+    return response.data;
+  },
+
+  deleteReminder: async (reminderId: string): Promise<void> => {
+    await authApi.delete(`/resource-notes/reminders/${reminderId}`);
+  },
+
+  // Stats
+  getStats: async (): Promise<ResourceNoteStats> => {
+    const response = await authApi.get('/resource-notes/stats');
+    return response.data;
+  },
+};
+
+// Resource Quality service
+import type {
+  ResourceFeedback,
+  ResourceFeedbackCreate,
+  ResourceFeedbackListResponse,
+  ModerationAction,
+  ModerationLog,
+  ModerationQueue,
+  ResourceQualityScores,
+  ResourceQualityLeaderboard,
+  QualityScoreBreakdown,
+  ResourceQualityStats,
+  RecomputeAllResult,
+} from '@/types/resource-quality';
+
+export const resourceQualityService = {
+  // ─── User Feedback ────────────────────────────────────────────
+  submitFeedback: async (data: ResourceFeedbackCreate): Promise<ResourceFeedback> => {
+    const response = await authApi.post('/resource-quality/feedback', data);
+    return response.data;
+  },
+
+  listFeedback: async (params?: {
+    resource_id?: string;
+    feedback_type?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ResourceFeedbackListResponse> => {
+    const response = await authApi.get('/resource-quality/feedback', { params });
+    return response.data;
+  },
+
+  getFeedback: async (feedbackId: string): Promise<ResourceFeedback> => {
+    const response = await authApi.get(`/resource-quality/feedback/${feedbackId}`);
+    return response.data;
+  },
+
+  deleteFeedback: async (feedbackId: string): Promise<void> => {
+    await authApi.delete(`/resource-quality/feedback/${feedbackId}`);
+  },
+
+  // ─── Quality Scores ───────────────────────────────────────────
+  getScores: async (resourceId: string): Promise<ResourceQualityScores> => {
+    const response = await authApi.get(`/resource-quality/resources/${resourceId}/scores`);
+    return response.data;
+  },
+
+  getBreakdown: async (resourceId: string): Promise<QualityScoreBreakdown> => {
+    const response = await authApi.get(`/resource-quality/resources/${resourceId}/breakdown`);
+    return response.data;
+  },
+
+  recomputeScores: async (resourceId: string): Promise<ResourceQualityScores> => {
+    const response = await authApi.post(`/resource-quality/resources/${resourceId}/recompute`);
+    return response.data;
+  },
+
+  getLeaderboard: async (params?: {
+    sort_by?: string;
+    limit?: number;
+    skill?: string;
+  }): Promise<ResourceQualityLeaderboard> => {
+    const response = await authApi.get('/resource-quality/leaderboard', { params });
+    return response.data;
+  },
+
+  recomputeAll: async (limit?: number): Promise<RecomputeAllResult> => {
+    const response = await authApi.post('/resource-quality/recompute-all', null, {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  // ─── Admin Moderation ────────────────────────────────────────
+  getModerationQueue: async (params?: {
+    status?: string;
+    feedback_type?: string;
+    priority?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ModerationQueue> => {
+    const response = await authApi.get('/resource-quality/admin/queue', { params });
+    return response.data;
+  },
+
+  getModerationLog: async (feedbackId: string): Promise<ModerationLog[]> => {
+    const response = await authApi.get(`/resource-quality/admin/feedback/${feedbackId}/log`);
+    return response.data;
+  },
+
+  moderateFeedback: async (
+    feedbackId: string,
+    data: ModerationAction
+  ): Promise<ResourceFeedback> => {
+    const response = await authApi.post(
+      `/resource-quality/admin/feedback/${feedbackId}/moderate`,
+      data
+    );
+    return response.data;
+  },
+
+  // ─── Stats ────────────────────────────────────────────────────
+  getStats: async (): Promise<ResourceQualityStats> => {
+    const response = await authApi.get('/resource-quality/stats');
+    return response.data;
+  },
+};
+
+// Admin service
+import type {
+  AdminUser,
+  AdminStats,
+  AuditLogEntry,
+  AdminAnalytics,
+  AdminResourceAnalytics,
+BulkUploadResult,
+  BulkEditResult,
+  BulkDeleteResult,
+  VerificationLogEntry,
+  UserRole,
+  ResourceSuggestionUpdatePayload,
+} from '@/types/admin';
+export const adminService = {
+  // ─── User Management ────────────────────────────────────────
+  listUsers: async (params?: {
+    role?: UserRole;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AdminUser[]> => {
+    const response = await authApi.get('/admin/users', { params });
+    return response.data;
+  },
+
+  updateUserRole: async (userId: string, role: UserRole): Promise<{ user_id: string; role: UserRole }> => {
+    const response = await authApi.patch(`/admin/users/${userId}/role`, null, { params: { role } });
+    return response.data;
+  },
+
+  updateUserStatus: async (userId: string, isActive: boolean): Promise<{ user_id: string; is_active: boolean }> => {
+    const response = await authApi.patch(`/admin/users/${userId}/status`, null, { params: { is_active: isActive } });
+    return response.data;
+  },
+
+  // ─── Audit Log ──────────────────────────────────────────────
+  getAuditLog: async (params?: {
+    admin_id?: string;
+    entity_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AuditLogEntry[]> => {
+    const response = await authApi.get('/admin/audit-log', { params });
+    return response.data;
+  },
+
+  // ─── Stats ──────────────────────────────────────────────────
+  getStats: async (): Promise<AdminStats> => {
+    const response = await authApi.get('/admin/stats');
+    return response.data;
+  },
+
+  // ─── Resource Management Admin ──────────────────────────────
+  getAdminAnalytics: async (): Promise<AdminAnalytics> => {
+    const response = await authApi.get('/resource-management/admin/analytics');
+    return response.data;
+  },
+
+  getResourceAnalytics: async (resourceId: string): Promise<AdminResourceAnalytics> => {
+    const response = await authApi.get(`/resource-management/${resourceId}/analytics`);
+    return response.data;
+  },
+
+  // ─── Community Suggestions ──────────────────────────────────
+  getSuggestions: async (params?: {
+    status?: 'pending' | 'approved' | 'rejected';
+    limit?: number;
+    offset?: number;
+  }): Promise<ResourceSuggestion[]> => {
+    const response = await authApi.get('/resource-management/suggestions', { params });
+    return response.data;
+  },
+
+  approveSuggestion: async (suggestionId: string, notes?: string): Promise<ResourceItem> => {
+    const response = await authApi.post(`/resource-management/suggestions/${suggestionId}/approve`, null, {
+      params: notes ? { notes } : {},
+    });
+    return response.data;
+  },
+
+rejectSuggestion: async (suggestionId: string, notes?: string): Promise<ResourceSuggestion> => {
+    const response = await authApi.post(`/resource-management/suggestions/${suggestionId}/reject`, null, {
+      params: notes ? { notes } : {},
+    });
+    return response.data;
+  },
+
+  editSuggestion: async (
+    suggestionId: string,
+    data: ResourceSuggestionUpdatePayload
+  ): Promise<ResourceSuggestion> => {
+    const response = await authApi.patch(`/resource-management/suggestions/${suggestionId}`, data);
+    return response.data;
+  },
+
+  // ─── Verification ───────────────────────────────────────────
+  verifyResource: async (resourceId: string, notes?: string): Promise<ResourceItem> => {
+    const response = await authApi.post(`/resource-management/${resourceId}/verify`, null, {
+      params: notes ? { notes } : {},
+    });
+    return response.data;
+  },
+
+  unverifyResource: async (resourceId: string, notes?: string): Promise<ResourceItem> => {
+    const response = await authApi.post(`/resource-management/${resourceId}/unverify`, null, {
+      params: notes ? { notes } : {},
+    });
+    return response.data;
+  },
+
+  getVerificationLog: async (resourceId: string): Promise<VerificationLogEntry[]> => {
+    const response = await authApi.get(`/resource-management/${resourceId}/verification-log`);
+    return response.data;
+  },
+
+  // ─── Bulk Operations ────────────────────────────────────────
+  bulkUpload: async (resources: ResourceCreatePayload[]): Promise<BulkUploadResult> => {
+    const response = await authApi.post('/resource-management/bulk', resources);
+    return response.data;
+  },
+
+  bulkEdit: async (updates: Array<ResourceUpdatePayload & { id: string }>): Promise<BulkEditResult> => {
+    const response = await authApi.patch('/resource-management/bulk', updates);
+    return response.data;
+  },
+
+  bulkDelete: async (resourceIds: string[]): Promise<BulkDeleteResult> => {
+    const response = await authApi.delete('/resource-management/bulk', { data: resourceIds });
     return response.data;
   },
 };
