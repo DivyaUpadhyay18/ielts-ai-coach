@@ -1166,7 +1166,457 @@ export interface RecommendationResponse {
   sub_skill: string | null;
   estimated_time: number;
   remaining_days: number | null;
-  recommendations: RecommendationItem[];
-  ranking_algorithm: string;
-  metadata: Record<string, any>;
+   recommendations: RecommendationItem[];
+   ranking_algorithm: string;
+   metadata: Record<string, any>;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Weekly AI Reports types (mirrors /api/v1/weekly-reports/*)
+// ─────────────────────────────────────────────────────────────
+
+export interface WeeklyReportMetrics {
+  week_start: string;
+  week_end: string;
+  current_band: number;
+  target_band: number;
+  days_remaining: number | null;
+  daily_budget_minutes: number;
+  task_target: number;
+  active_days_in_week: number;
+  total_days_in_week: number;
+  daily_streak: number;
+  longest_streak: number;
+  weekly_streak: number;
+  monthly_streak: number;
+  perfect_day_count: number;
+  total_xp: number;
+  has_diagnostic: boolean;
+  diagnostic_source: string;
+  skill_bands: Record<string, number>;
+  weakest_skills: string[];
+  strongest_skills: string[];
+}
+
+export interface PreviousReport {
+  week_start: string | null;
+  estimated_band: number | null;
+  tasks_completed: number | null;
+}
+
+export interface WeeklyReportResponse {
+  user_id: string;
+  week_start: string;
+  week_end: string;
+  generated_at: string;
+  version: number;
+  summary: string;
+  achievements: string[];
+  weakest_skill: string | null;
+  weakest_skill_key: string | null;
+  strongest_skill: string | null;
+  strongest_skill_key: string | null;
+  hours_studied: number;
+  tasks_completed: number;
+  streak: number;
+  consistency: number;
+  estimated_band: number;
+  suggestions: string[];
+  next_week_focus: string[];
+  metrics: WeeklyReportMetrics;
+  formulas: Record<string, string>;
+  previous_week_band: number | null;
+  previous_report: PreviousReport | null;
+}
+
+export interface WeeklyReportHistoryItem {
+  id: string;
+  user_id: string;
+  week_start: string;
+  week_end: string;
+  generated_at: string;
+  estimated_band: number;
+  tasks_completed: number;
+  hours_studied: number;
+  consistency: number;
+  streak: number;
+  summary: string;
+}
+
+export interface WeeklyReportHistoryResponse {
+  items: WeeklyReportHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI Recommendations types (mirrors /api/v1/ai-recommendations/*)
+// ─────────────────────────────────────────────────────────────
+
+export interface AiRecommendationStudyOrderEntry {
+  order: number;
+  skill: string;
+  label: string;
+  band: number;
+  band_gap: number;
+  priority_score: number;
+  is_production: boolean;
+}
+
+export interface AiRecommendationRevisionItem {
+  skill: string;
+  label: string;
+  band: number;
+  intensity: "critical" | "high" | "medium" | "low";
+  focus_area: string;
+  topics: string[];
+}
+
+export interface AiRecommendationPracticeItem {
+  skill: string;
+  label: string;
+  band: number;
+  recommended_minutes: number;
+  practice_type: string;
+  priority: "high" | "medium" | "low";
+}
+
+export interface AiRecommendationBreak {
+  type: string;
+  title: string;
+  description: string;
+  frequency: string;
+  duration_minutes: number;
+}
+
+export interface AiRecommendationTimeSplit {
+  weak_skills: string;
+  weak_minutes: number;
+  strong_skills: string;
+  strong_minutes: number;
+  review: string;
+  review_minutes: number;
+}
+
+export interface AiRecommendationTimeManagement {
+  daily_budget_minutes: number;
+  time_split: AiRecommendationTimeSplit;
+  tasks_per_day: number;
+  weekly_target_minutes: number;
+  weekly_actual_minutes: number;
+  focus_mode: "balanced" | "intensive" | "exam-cram";
+  band_gap: number;
+  level: number;
+  tip: string;
+}
+
+export interface AiRecommendationMetrics {
+  week_start: string;
+  week_end: string;
+  current_band: number;
+  target_band: number;
+  days_remaining: number | null;
+  daily_budget_minutes: number;
+  task_target: number;
+  active_days_in_week: number;
+  total_days_in_week: number;
+  daily_streak: number;
+  longest_streak: number;
+  weekly_streak: number;
+  monthly_streak: number;
+  perfect_day_count: number;
+  total_xp: number;
+  has_diagnostic: boolean;
+  diagnostic_source: string;
+  skill_bands: Record<string, number>;
+  weakest_skills: string[];
+  strongest_skills: string[];
+}
+
+export interface AiRecommendationsResponse {
+  user_id: string;
+  run_date: string;
+  generated_at: string;
+  version: number;
+  current_band: number;
+  target_band: number;
+  days_remaining: number | null;
+  daily_budget_minutes: number;
+  skill_bands: Record<string, number>;
+  weakest_skills: string[];
+  strongest_skills: string[];
+  weakest_skill: string | null;
+  weakest_skill_key: string | null;
+  strongest_skill: string | null;
+  strongest_skill_key: string | null;
+  hours_studied: number;
+  tasks_completed: number;
+  streak: number;
+  consistency: number;
+  estimated_band: number;
+  summary: string;
+  suggestions: string[];
+  study_order: AiRecommendationStudyOrderEntry[];
+  revision_priorities: AiRecommendationRevisionItem[];
+  extra_practice: AiRecommendationPracticeItem[];
+  additional_resources: RecommendedResource[];
+  break_suggestions: AiRecommendationBreak[];
+  time_management: AiRecommendationTimeManagement;
+  next_week_focus: string[];
+  metrics: AiRecommendationMetrics;
+  formulas: Record<string, string>;
+  previous_week_band: number | null;
+  previous_report: PreviousReport | null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI Mentor Memory types (mirrors /api/v1/mentor-memory/*)
+// ─────────────────────────────────────────────────────────────
+
+export interface MentorMemoryEntry {
+  id: string;
+  memory_type: string;
+  category: string | null;
+  subcategory: string | null;
+  content: string;
+  structured_data: Record<string, any>;
+  confidence: number;
+  weight: number;
+  context: Record<string, any>;
+  last_accessed_at: string | null;
+  accessed_count: number;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface MentorMemoryProfile {
+  total_memories: number;
+  recurring_mistakes: MentorMemoryEntry[];
+  faqs: MentorMemoryEntry[];
+  weak_grammar: MentorMemoryEntry[];
+  weak_vocabulary: MentorMemoryEntry[];
+  learning_preferences: MentorMemoryEntry[];
+  motivation_styles: MentorMemoryEntry[];
+  conversation_insights: MentorMemoryEntry[];
+  weak_skills: string[];
+  preference_texts: string[];
+  motivation_texts: string[];
+}
+
+export interface MemoryTypeSchema {
+  type: string;
+  label: string;
+  description: string;
+  category_required: boolean;
+  subcategory_required: boolean;
+}
+
+export interface ExtractionResult {
+  status: string;
+  memories_added: number;
+  memories_updated: number;
+  details: Record<string, number>;
+}
+
+// AI Mentor types (mirrors /api/v1/mentor/*)
+// ─────────────────────────────────────────────────────────────
+
+export type MentorMode = 'daily_coaching' | 'roadmap_analysis' | 'risk_check' | 'ask_mentor' | 'missed_day' | 'general';
+export type MentorSeverity = 'positive' | 'low' | 'medium' | 'high';
+export type MentorTone = 'encouraging' | 'firm' | 'urgent' | 'neutral';
+
+export interface MentorInsight {
+  type: string;
+  severity: MentorSeverity;
+  title: string;
+  detail: string;
+  skill?: string | null;
+  metric: Record<string, any>;
+}
+
+export interface CoachingDirective {
+  priority: number;
+  action: string;
+  detail: string;
+  skill?: string | null;
+  ref?: Record<string, any> | null;
+}
+
+export interface MentorGuardrails {
+  never_generates_plan: boolean;
+  plan_generation_triggered: boolean;
+  analysis_source: string;
+  note: string;
+}
+
+export interface MentorMessageContent {
+  role: string;
+  content: string;
+  generated_by: string;
+  tone: MentorTone;
+}
+
+export interface MentorContextProfile {
+  user_id: string;
+  full_name: string | null;
+  module: string;
+  plan: string;
+  daily_minutes_budget: number;
+  current_band: number | null;
+  target_band: number | null;
+  exam_date: string | null;
+  profile_source: string;
+  has_diagnostic: boolean;
+  diagnostic_attempt_id: string | null;
+  weakest_skills: string[];
+  strongest_skills: string[];
+  skill_bands: Record<string, number>;
+}
+
+export interface MentorContextExam {
+  exam_date: string | null;
+  days_remaining: number | null;
+  weeks_remaining: number | null;
+  intensity: string | null;
+  in_crunch_window: boolean;
+}
+
+export interface MentorContextRoadmap {
+  has_active_plan: boolean;
+  study_plan_id: string | null;
+  title: string | null;
+  version: number | null;
+  start_date: string | null;
+  exam_date: string | null;
+  total_tasks: number;
+  completed_tasks: number;
+  progress_percent: number;
+  missed_tasks: number;
+  pending_tasks: number;
+  current_phase_index: number | null;
+  total_phases: number;
+  upcoming_task_count_7d: number;
+  upcoming_by_skill_7d: Record<string, number>;
+  days_since_start: number;
+  roadmap_generated_from: string | null;
+}
+
+export interface MentorContextStudyHistory {
+  total_minutes: number;
+  total_tasks_completed: number;
+  total_xp: number;
+  current_streak: number;
+  longest_streak: number;
+  last_active_date: string | null;
+  active_days: number;
+  minutes_this_week: number;
+  week_budget_minutes: number;
+  week_percent: number;
+  consistency_percent: number;
+}
+
+export interface MentorContextMissedTasks {
+  total_missed: number;
+  recent_missed_7d: number;
+  overdue_pending: number;
+  by_skill: Record<string, number>;
+  examples: Array<{
+    task_id: string;
+    title: string;
+    skill: string;
+    task_type: string;
+    scheduled_date?: string | null;
+    rescheduled_to?: string | null;
+    status: string;
+    priority: number;
+    reason?: string | null;
+  }>;
+  last_scheduler_adjustments: any[];
+}
+
+export interface MentorContextPrediction {
+  has_prediction: boolean;
+  estimated_band: number | null;
+  readiness_score: number | null;
+  risk_level: string | null;
+  preparation_percentage: number | null;
+  completion_rate: number | null;
+  study_consistency: number | null;
+}
+
+export interface MentorContextResponse {
+  generated_at: string;
+  profile: MentorContextProfile;
+  exam: MentorContextExam;
+  roadmap: MentorContextRoadmap;
+  study_history: MentorContextStudyHistory;
+  missed_tasks: MentorContextMissedTasks;
+  prediction: MentorContextPrediction;
+  band_gap: number | null;
+  skill_labels: Record<string, string>;
+}
+
+export interface CoachRequest {
+  mode: MentorMode;
+  message?: string | null;
+}
+
+export interface AskRequest {
+  question: string;
+}
+
+export interface CoachResponse {
+  conversation_id: string;
+  mode: string;
+  created_at: string;
+  title: string;
+  message: MentorMessageContent;
+  context_summary: Record<string, any>;
+  insights: MentorInsight[];
+  directives: CoachingDirective[];
+  guardrails: MentorGuardrails;
+}
+
+export interface MentorMessageResponse {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  role: string;
+  content: string;
+  structured: Record<string, any>;
+  created_at: string | null;
+}
+
+export interface MentorConversationItem {
+  id: string;
+  mode: string;
+  title: string;
+  status: string;
+  message_count: number;
+  last_message_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface MentorConversationResponse {
+  id: string;
+  user_id: string;
+  mode: string;
+  title: string;
+  status: string;
+  context_snapshot: Record<string, any>;
+  meta: Record<string, any>;
+  messages: MentorMessageResponse[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface MentorConversationListResponse {
+  items: MentorConversationItem[];
+  total: number;
+  limit: number;
+  offset: number;
 }

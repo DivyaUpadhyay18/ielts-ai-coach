@@ -1502,5 +1502,174 @@ rejectSuggestion: async (suggestionId: string, notes?: string): Promise<Resource
   },
 };
 
+// AI Mentor service
+import type {
+  CoachRequest,
+  CoachResponse,
+  MentorContextResponse,
+  MentorConversationListResponse,
+  MentorConversationResponse,
+} from '@/types';
+
+export const mentorService = {
+  getContext: async (): Promise<MentorContextResponse> => {
+    const response = await authApi.get('/mentor/context');
+    return response.data;
+  },
+
+  coach: async (data: CoachRequest): Promise<CoachResponse> => {
+    const response = await authApi.post('/mentor/coach', data);
+    return response.data;
+  },
+
+  ask: async (question: string): Promise<CoachResponse> => {
+    const response = await authApi.post('/mentor/ask', { question });
+    return response.data;
+  },
+
+  listConversations: async (params?: {
+    mode?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MentorConversationListResponse> => {
+    const response = await authApi.get('/mentor/conversations', { params });
+    return response.data;
+  },
+
+  getConversation: async (conversationId: string): Promise<MentorConversationResponse> => {
+    const response = await authApi.get(`/mentor/conversations/${conversationId}`);
+    return response.data;
+  },
+};
+
+// ─────────────────────────────────────────────────────────────
+// Weekly AI Reports service (mirrors /api/v1/weekly-reports/*)
+// ─────────────────────────────────────────────────────────────
+import type {
+  WeeklyReportResponse,
+  WeeklyReportHistoryResponse,
+} from '@/types';
+
+export const weeklyReportService = {
+  getLatest: async (forceRegenerate = false): Promise<WeeklyReportResponse> => {
+    const response = await authApi.get('/weekly-reports', {
+      params: { force_regenerate: forceRegenerate },
+    });
+    return response.data;
+  },
+
+  getHistory: async (limit = 20, offset = 0): Promise<WeeklyReportHistoryResponse> => {
+    const response = await authApi.get('/weekly-reports/history', {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  getByWeek: async (weekStart: string, forceRegenerate = false): Promise<WeeklyReportResponse> => {
+    const response = await authApi.get(`/weekly-reports/${weekStart}`, {
+      params: { force_regenerate: forceRegenerate },
+    });
+    return response.data;
+  },
+};
+
+// ─────────────────────────────────────────────────────────────
+// AI Recommendations service (mirrors /api/v1/ai-recommendations/*)
+// ─────────────────────────────────────────────────────────────
+import type { AiRecommendationsResponse } from '@/types';
+
+export const aiRecommendationsService = {
+  getRecommendations: async (forceRegenerate = false): Promise<AiRecommendationsResponse> => {
+    const response = await authApi.get('/ai-recommendations', {
+      params: { force_regenerate: forceRegenerate },
+    });
+    return response.data;
+  },
+
+  getHistory: async (limit = 20, offset = 0): Promise<WeeklyReportHistoryResponse> => {
+    const response = await authApi.get('/ai-recommendations/history', {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+
+  getByWeek: async (weekStart: string, forceRegenerate = false): Promise<AiRecommendationsResponse> => {
+    const response = await authApi.get(`/ai-recommendations/${weekStart}`, {
+      params: { force_regenerate: forceRegenerate },
+    });
+    return response.data;
+  },
+};
+
+// ─────────────────────────────────────────────────────────────
+// AI Mentor Memory service (mirrors /api/v1/mentor-memory/*)
+// ─────────────────────────────────────────────────────────────
+import type {
+  MentorMemoryProfile,
+  MentorMemoryEntry,
+  MemoryTypeSchema,
+  ExtractionResult,
+} from '@/types';
+
+export const mentorMemoryService = {
+  getProfile: async (): Promise<MentorMemoryProfile> => {
+    const response = await authApi.get('/mentor-memory');
+    return response.data;
+  },
+
+  extractMemories: async (force = false): Promise<ExtractionResult> => {
+    const response = await authApi.post('/mentor-memory/extract', {}, {
+      params: { force },
+    });
+    return response.data;
+  },
+
+  getMemoryTypes: async (): Promise<MemoryTypeSchema[]> => {
+    const response = await authApi.get('/mentor-memory/types');
+    return response.data;
+  },
+
+  listMemories: async (params?: {
+    memory_type?: string;
+    category?: string;
+    limit?: number;
+  }): Promise<MentorMemoryEntry[]> => {
+    const response = await authApi.get('/mentor-memory/list', { params });
+    return response.data;
+  },
+
+  addMemory: async (data: {
+    memory_type: string;
+    content: string;
+    category?: string;
+    subcategory?: string;
+    structured_data?: Record<string, any>;
+    confidence?: number;
+  }): Promise<MentorMemoryEntry> => {
+    const response = await authApi.post('/mentor-memory', data);
+    return response.data;
+  },
+
+  updateMemory: async (
+    memoryId: string,
+    data: Partial<{
+      content: string;
+      category: string;
+      subcategory: string;
+      structured_data: Record<string, any>;
+      confidence: number;
+      is_active: boolean;
+      expires_at: string;
+    }>
+  ): Promise<MentorMemoryEntry> => {
+    const response = await authApi.patch(`/mentor-memory/${memoryId}`, data);
+    return response.data;
+  },
+
+  deleteMemory: async (memoryId: string): Promise<void> => {
+    await authApi.delete(`/mentor-memory/${memoryId}`);
+  },
+};
+
 export { authApi, api };
 export default api;

@@ -17,6 +17,9 @@ import {
   History,
   BookOpen,
   PlayCircle,
+  Trophy,
+  MessageSquare,
+  Brain,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
@@ -67,6 +70,24 @@ const Sidebar = () => {
       active: pathname === "/prediction",
     },
     {
+      label: "AI Memory",
+      icon: Brain,
+      href: "/ai-memory",
+      active: pathname === "/ai-memory" || pathname.startsWith("/ai-memory"),
+    },
+    {
+      label: "AI Recommendations",
+      icon: Zap,
+      href: "/recommendations-ai",
+      active: pathname === "/recommendations-ai" || pathname.startsWith("/recommendations-ai"),
+    },
+    {
+      label: "Weekly AI Reports",
+      icon: Calendar,
+      href: "/weekly-reports",
+      active: pathname === "/weekly-reports" || pathname.startsWith("/weekly-reports"),
+    },
+    {
       label: "Schedule History",
       icon: History,
       href: "/schedule-history",
@@ -89,6 +110,12 @@ const Sidebar = () => {
       icon: PlayCircle,
       href: "/learn",
       active: pathname === "/learn",
+    },
+    {
+      label: "AI Mentor",
+      icon: MessageSquare,
+      href: "/mentor",
+      active: pathname === "/mentor",
     },
   ];
 
