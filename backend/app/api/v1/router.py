@@ -37,6 +37,7 @@ from app.api.v1.weekly_reports import router as weekly_reports_router
 from app.api.v1.ai_recommendations import router as ai_recommendations_router
 from app.api.v1.mentor_memory import router as mentor_memory_router
 from app.api.v1.reflections import router as reflections_router
+from app.api.v1.writing_workspace import router as writing_workspace_router
 
 router = APIRouter()
 
@@ -78,3 +79,4 @@ router.include_router(reflections_router, prefix="/reflections", tags=["Mission 
 router.include_router(weekly_reports_router, prefix="/weekly-reports", tags=["Weekly AI Reports"])
 router.include_router(ai_recommendations_router, prefix="/ai-recommendations", tags=["AI Recommendations"])
 router.include_router(mentor_memory_router, prefix="/mentor-memory", tags=["AI Mentor Memory"])
+router.include_router(writing_workspace_router, prefix="/writing-workspace", tags=["Writing Workspace"])

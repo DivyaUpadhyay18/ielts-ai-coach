@@ -1671,5 +1671,64 @@ export const mentorMemoryService = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────
+// Writing Workspace service (mirrors /api/v1/writing-workspace/*)
+// ─────────────────────────────────────────────────────────────
+import type {
+  WritingWorkspacePrompt,
+  WritingWorkspacePromptsResponse,
+  WritingWorkspacePromptResponse,
+  WritingWorkspaceSubmission,
+  WritingWorkspaceSubmissionStart,
+  WritingWorkspaceSubmissionSave,
+  WritingWorkspaceSubmissionSubmit,
+  WritingWorkspaceSubmissionListResponse,
+} from '@/types/writing-workspace';
+
+export const writingWorkspaceService = {
+  getPrompts: async (taskType?: string): Promise<WritingWorkspacePromptsResponse> => {
+    const response = await authApi.get('/writing-workspace/prompts', {
+      params: taskType ? { task_type: taskType } : undefined,
+    });
+    return response.data;
+  },
+
+  getPrompt: async (promptId: string): Promise<WritingWorkspacePromptResponse> => {
+    const response = await authApi.get(`/writing-workspace/prompts/${promptId}`);
+    return response.data;
+  },
+
+  startSubmission: async (data: WritingWorkspaceSubmissionStart): Promise<WritingWorkspaceSubmission> => {
+    const response = await authApi.post('/writing-workspace/start', data);
+    return response.data;
+  },
+
+  autoSave: async (
+    submissionId: string,
+    data: WritingWorkspaceSubmissionSave
+  ): Promise<WritingWorkspaceSubmission> => {
+    const response = await authApi.post(`/writing-workspace/${submissionId}/save`, data);
+    return response.data;
+  },
+
+  submit: async (
+    submissionId: string,
+    data?: WritingWorkspaceSubmissionSubmit
+  ): Promise<WritingWorkspaceSubmission> => {
+    const response = await authApi.post(`/writing-workspace/${submissionId}/submit`, data || {});
+    return response.data;
+  },
+
+  getSubmission: async (submissionId: string): Promise<WritingWorkspaceSubmission> => {
+    const response = await authApi.get(`/writing-workspace/${submissionId}`);
+    return response.data;
+  },
+
+  listSubmissions: async (limit = 50): Promise<WritingWorkspaceSubmissionListResponse> => {
+    const response = await authApi.get('/writing-workspace', { params: { limit } });
+    return response.data;
+  },
+};
+
 export { authApi, api };
 export default api;
