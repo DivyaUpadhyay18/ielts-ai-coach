@@ -21,6 +21,22 @@ from app.api.v1.prediction import router as prediction_router
 from app.api.v1.resource_management import router as resource_management_router
 from app.api.v1.recommendation_engine import router as recommendation_router
 from app.api.v1.learning_session import router as learning_session_router
+from app.api.v1.resource_notes import router as resource_notes_router
+from app.api.v1.analytics import router as analytics_router
+from app.api.v1.resource_quality import router as resource_quality_router
+from app.api.v1.diagnostic import router as diagnostic_router
+from app.api.v1.reading_diagnostic import router as reading_diagnostic_router
+from app.api.v1.listening_diagnostic import router as listening_diagnostic_router
+from app.api.v1.writing_diagnostic import router as writing_diagnostic_router
+from app.api.v1.speaking_diagnostic import router as speaking_diagnostic_router
+from app.api.v1.vocab_grammar_diagnostic import router as vocab_grammar_diagnostic_router
+from app.api.v1.admin import router as admin_router
+from app.api.v1.band_estimation import router as band_estimation_router
+from app.api.v1.mentor import router as mentor_router
+from app.api.v1.weekly_reports import router as weekly_reports_router
+from app.api.v1.ai_recommendations import router as ai_recommendations_router
+from app.api.v1.mentor_memory import router as mentor_memory_router
+from app.api.v1.reflections import router as reflections_router
 
 router = APIRouter()
 
@@ -46,3 +62,19 @@ router.include_router(prediction_router, prefix="/prediction", tags=["Prediction
 router.include_router(resource_management_router, prefix="/resource-management", tags=["Resource Management"])
 router.include_router(recommendation_router, prefix="/recommendations", tags=["Intelligent Recommendations"])
 router.include_router(learning_session_router, prefix="/learning-sessions", tags=["Learning Sessions"])
+router.include_router(resource_notes_router, prefix="/resource-notes", tags=["Resource Notes"])
+router.include_router(analytics_router, prefix="/analytics", tags=["Analytics"])
+router.include_router(resource_quality_router, prefix="/resource-quality", tags=["Resource Quality"])
+router.include_router(diagnostic_router, prefix="/diagnostic", tags=["Diagnostic Test"])
+router.include_router(reading_diagnostic_router, prefix="/reading", tags=["Reading Diagnostic"])
+router.include_router(listening_diagnostic_router, prefix="/listening", tags=["Listening Diagnostic"])
+router.include_router(writing_diagnostic_router, prefix="/writing", tags=["Writing Diagnostic"])
+router.include_router(speaking_diagnostic_router, prefix="/speaking", tags=["Speaking Diagnostic"])
+router.include_router(vocab_grammar_diagnostic_router, prefix="/vocab-grammar", tags=["Vocabulary & Grammar Diagnostic"])
+router.include_router(admin_router, prefix="/admin", tags=["Admin"])
+router.include_router(band_estimation_router, prefix="/band-estimation", tags=["Band Estimation"])
+router.include_router(mentor_router, prefix="/mentor", tags=["AI Mentor"])
+router.include_router(reflections_router, prefix="/reflections", tags=["Mission Reflections"])
+router.include_router(weekly_reports_router, prefix="/weekly-reports", tags=["Weekly AI Reports"])
+router.include_router(ai_recommendations_router, prefix="/ai-recommendations", tags=["AI Recommendations"])
+router.include_router(mentor_memory_router, prefix="/mentor-memory", tags=["AI Mentor Memory"])

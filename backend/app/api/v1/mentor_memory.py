@@ -22,12 +22,12 @@ from app.models.mentor_memory import (
     MemoryEntry,
     ExtractionResult,
 )
-from app.services.mentor_memory_service import AiRecommendationsService, mentor_memory_service
+from app.services.mentor_memory_service import MentorMemoryService, mentor_memory_service
 
 router = APIRouter()
 
 
-def get_mentor_memory_service() -> AiRecommendationsService:
+def get_mentor_memory_service() -> MentorMemoryService:
     return mentor_memory_service
 
 
@@ -38,7 +38,7 @@ def get_mentor_memory_service() -> AiRecommendationsService:
 )
 async def get_memory_profile(
     user_id: str = Depends(get_current_user),
-    service: AiRecommendationsService = Depends(get_mentor_memory_service),
+    service: MentorMemoryService = Depends(get_mentor_memory_service),
 ):
     """
     Fetch the user's consolidated AI mentor memory profile.
@@ -63,7 +63,7 @@ async def get_memory_profile(
 async def extract_memories(
     force: bool = Query(False, description="Force re-extraction even if recently done"),
     user_id: str = Depends(get_current_user),
-    service: AiRecommendationsService = Depends(get_mentor_memory_service),
+    service: MentorMemoryService = Depends(get_mentor_memory_service),
 ):
     """Trigger extraction of memories from diagnostic, progress, and conversation data."""
     return service.extract_and_store_memories(user_id, force=force)
@@ -76,7 +76,7 @@ async def extract_memories(
 )
 async def get_memory_types(
     user_id: str = Depends(get_current_user),
-    service: AiRecommendationsService = Depends(get_mentor_memory_service),
+    service: MentorMemoryService = Depends(get_mentor_memory_service),
 ):
     """Return the available memory types and their schema."""
     return service.get_memory_types()
@@ -92,7 +92,7 @@ async def list_memories(
     category: Optional[str] = Query(None, description="Filter by category"),
     limit: int = Query(50, ge=1, le=200),
     user_id: str = Depends(get_current_user),
-    service: AiRecommendationsService = Depends(get_mentor_memory_service),
+    service: MentorMemoryService = Depends(get_mentor_memory_service),
 ):
     """List the user's raw memory entries, optionally filtered."""
     return service.get_memories(user_id, memory_type=memory_type, category=category, limit=limit)
@@ -106,7 +106,7 @@ async def list_memories(
 async def create_memory(
     data: MemoryCreateRequest = Depends(),
     user_id: str = Depends(get_current_user),
-    service: AiRecommendationsService = Depends(get_mentor_memory_service),
+    service: MentorMemoryService = Depends(get_mentor_memory_service),
 ):
     """Manually add a memory entry to the user's mentor memory."""
     try:
@@ -133,7 +133,7 @@ async def update_memory(
     memory_id: str,
     data: MemoryUpdateRequest = Depends(),
     user_id: str = Depends(get_current_user),
-    service: AiRecommendationsService = Depends(get_mentor_memory_service),
+    service: MentorMemoryService = Depends(get_mentor_memory_service),
 ):
     """Update a memory entry (owner-scoped)."""
     try:
@@ -154,7 +154,7 @@ async def update_memory(
 async def delete_memory(
     memory_id: str,
     user_id: str = Depends(get_current_user),
-    service: AiRecommendationsService = Depends(get_mentor_memory_service),
+    service: MentorMemoryService = Depends(get_mentor_memory_service),
 ):
     """Soft-delete a memory entry (sets is_active = False)."""
     try:

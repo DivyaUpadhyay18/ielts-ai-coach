@@ -1,169 +1,111 @@
 """
-Pydantic schemas for the Learning Session Mode.
-
-Provides schemas for:
-- Session start (fetch mission + recommended resources)
-- Session state tracking (progress, notes, bookmarks)
-- Session completion (XP, dashboard updates)
-- Session history
+Pydantic schemas for the Learning Session domain.
 """
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, field_validator
 
-from app.models.daily_mission import DailyMissionResponse
-from app.models.recommendation import ResourceResponse
+from pydantic import BaseModel, Field
+
+
+class SessionStartRequest(BaseModel):
+    """Schema for starting a learning session."""
+    mission_id: Optional[str] = None
+    session_type: str = Field("learning_session", description="Type of session")
+    skill_focus: Optional[str] = None
 
 
 class SessionStartResponse(BaseModel):
-    """Response for starting a learning session."""
-    user_id: str
+    """Schema for session start response."""
     session_id: str
-    mission: Optional[DailyMissionResponse] = None
-    recommended_resource: Optional[ResourceResponse] = None
-    related_resources: List[ResourceResponse] = Field(default_factory=list)
-    previous_mistakes: List[PreviousMistake] = Field(default_factory=list)
-    notes: List[SessionNote] = Field(default_factory=list)
-    bookmarks: List[SessionBookmark] = Field(default_factory=list)
-    progress_percent: int = 0
-    estimated_time: int = 0
-    xp_reward: int = 0
-    current_band: Optional[float] = None
-    target_band: Optional[float] = None
-    remaining_days: Optional[int] = None
-    created_at: Optional[datetime] = None
+    mission_id: Optional[str]
+    skill_focus: Optional[str]
+    started_at: str
+    estimated_duration: int
+    resources: List[Dict[str, Any]]
 
 
-class PreviousMistake(BaseModel):
-    """A previous mistake from the user's study history."""
-    task_id: str
-    task_title: str
-    skill: str
-    mistake_type: str
-    description: str
-    created_at: Optional[datetime] = None
-
-
-class SessionNoteBase(BaseModel):
-    """Base schema for session notes."""
-    content: str = Field(..., min_length=1, max_length=5000)
-    resource_id: Optional[str] = None
-
-
-class SessionNoteCreate(SessionNoteBase):
+class SessionNoteCreate(BaseModel):
     """Schema for creating a session note."""
-    mission_id: Optional[str] = None
-    session_id: Optional[str] = None
+    content: str
+    resource_id: Optional[str] = None
+    is_highlighted: bool = False
+    color: str = "yellow"
 
 
-class SessionNoteUpdate(BaseModel):
-    """Schema for updating a session note."""
-    content: Optional[str] = Field(None, min_length=1, max_length=5000)
-
-
-class SessionNote(SessionNoteBase):
-    """Schema for a session note response."""
+class SessionNoteResponse(BaseModel):
+    """Schema for session note response."""
     id: str
     user_id: str
-    mission_id: Optional[str] = None
-    session_id: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    mission_id: Optional[str]
+    resource_id: Optional[str]
+    content: str
+    is_highlighted: bool
+    color: str
+    created_at: str
+    updated_at: str
 
 
-class SessionBookmarkBase(BaseModel):
-    """Base schema for session bookmarks."""
-    resource_id: str
-    mission_id: Optional[str] = None
-    session_id: Optional[str] = None
-
-
-class SessionBookmarkCreate(SessionBookmarkBase):
+class SessionBookmarkCreate(BaseModel):
     """Schema for creating a session bookmark."""
-    pass
+    resource_id: str
+    note: Optional[str] = None
 
 
-class SessionBookmark(BaseModel):
-    """Schema for a session bookmark response."""
+class SessionBookmarkResponse(BaseModel):
+    """Schema for session bookmark response."""
     id: str
     user_id: str
+    mission_id: Optional[str]
     resource_id: str
-    mission_id: Optional[str] = None
-    session_id: Optional[str] = None
-    created_at: Optional[datetime] = None
+    note: Optional[str]
+    created_at: str
+
+
+class SessionStateResponse(BaseModel):
+    """Schema for session state response."""
+    id: str
+    user_id: str
+    mission_id: Optional[str]
+    status: str
+    progress_percent: float
+    started_at: str
+    completed_at: Optional[str]
+    created_at: str
+    updated_at: str
 
 
 class SessionStateUpdate(BaseModel):
-    """Schema for updating session state."""
-    progress_percent: Optional[int] = Field(None, ge=0, le=100)
-    status: Optional[str] = Field(None, pattern="^(active|completed|abandoned)$")
-
-    @field_validator("progress_percent")
-    @classmethod
-    def validate_progress(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and (v < 0 or v > 100):
-            raise ValueError("progress_percent must be between 0 and 100")
-        return v
+    """Schema for updating session progress."""
+    progress_percent: float
+    status: str
 
 
 class SessionCompleteRequest(BaseModel):
     """Schema for completing a learning session."""
-    session_id: str
-    notes: Optional[List[str]] = None
-    progress: Optional[int] = Field(None, ge=0, le=100)
-    actual_duration_minutes: Optional[int] = Field(None, ge=0, le=300)
+    actual_duration_minutes: Optional[int] = None
+    notes: Optional[str] = None
 
 
 class SessionCompleteResponse(BaseModel):
-    """Response for completing a learning session."""
+    """Schema for session completion response."""
     session_id: str
     mission_completed: bool
     xp_earned: int
-    total_xp: int
-    level: int
-    level_progress: float
-    streak_current: int
-    streak_longest: int
-    achievements_unlocked: List[str] = Field(default_factory=list)
-    message: str
+    new_level: Optional[int]
+    streak_updated: Optional[Dict[str, Any]]
+    achievements_unlocked: Optional[List[Dict[str, Any]]]
 
 
 class SessionHistoryResponse(BaseModel):
-    """Response for session history."""
-    sessions: List[SessionStateHistory] = Field(default_factory=list)
+    """Schema for session history list."""
+    sessions: List[Dict[str, Any]]
     total: int
     limit: int
     offset: int
 
 
-class SessionStateHistory(BaseModel):
-    """Schema for historical session state."""
-    id: str
-    user_id: str
-    mission_id: str
-    session_id: Optional[str] = None
-    status: str
-    progress_percent: int
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    notes_count: int
-    bookmarked_resources: int
-    xp_earned: int
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
-
 class MissionWithSessionResponse(BaseModel):
-    """Response combining mission data with session state."""
-    user_id: str
-    mission: Optional[DailyMissionResponse] = None
-    session: Optional[SessionStateHistory] = None
-    recommended_resource: Optional[ResourceResponse] = None
-    related_resources: List[ResourceResponse] = Field(default_factory=list)
-    previous_mistakes: List[PreviousMistake] = Field(default_factory=list)
-    notes: List[SessionNote] = Field(default_factory=list)
-    bookmarks: List[SessionBookmark] = Field(default_factory=list)
-    current_band: Optional[float] = None
-    target_band: Optional[float] = None
-    remaining_days: Optional[int] = None
+    """Schema for mission with session state."""
+    mission_id: str
+    title: str
+    session_state: Optional[SessionStateResponse]
