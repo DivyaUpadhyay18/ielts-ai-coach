@@ -1724,8 +1724,38 @@ export const writingWorkspaceService = {
     return response.data;
   },
 
-  listSubmissions: async (limit = 50): Promise<WritingWorkspaceSubmissionListResponse> => {
-    const response = await authApi.get('/writing-workspace', { params: { limit } });
+   listSubmissions: async (limit = 50): Promise<WritingWorkspaceSubmissionListResponse> => {
+     const response = await authApi.get('/writing-workspace', { params: { limit } });
+     return response.data;
+   },
+};
+
+// Writing Evaluation service (mirrors /api/v1/writing-evaluations/*)
+// ─────────────────────────────────────────────────────────────
+import type {
+  WritingEvaluation,
+  WritingEvaluationListResponse,
+  CriterionEvaluation,
+} from '@/types/writing-workspace';
+
+export const writingEvaluationService = {
+  evaluateSubmission: async (
+    submissionId: string,
+    taskType: 'task_1' | 'task_2' = 'task_2'
+  ): Promise<WritingEvaluation> => {
+    const response = await authApi.post(
+      `/writing-evaluations/${submissionId}?task_type=${taskType}`
+    );
+    return response.data;
+  },
+
+  getEvaluation: async (submissionId: string): Promise<WritingEvaluation> => {
+    const response = await authApi.get(`/writing-evaluations/${submissionId}`);
+    return response.data;
+  },
+
+  listEvaluations: async (limit = 20): Promise<WritingEvaluationListResponse> => {
+    const response = await authApi.get('/writing-evaluations', { params: { limit } });
     return response.data;
   },
 };

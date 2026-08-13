@@ -25,11 +25,12 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Modal, ModalHeader, ModalTitle, ModalFooter } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
-import { writingWorkspaceService } from "@/services/api";
+import { writingWorkspaceService, writingEvaluationService } from "@/services/api";
 import type {
   WritingWorkspacePrompt,
   WritingWorkspaceSubmission,
   WritingWorkspacePromptsResponse,
+  WritingEvaluation,
 } from "@/types/writing-workspace";
 import {
   WRITING_WORKSPACE_TASK_LABELS,
@@ -84,6 +85,8 @@ export default function WritingWorkspacePage() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [evaluation, setEvaluation] = useState<WritingEvaluation | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load prompts
@@ -180,6 +183,40 @@ export default function WritingWorkspacePage() {
       setIsSubmitting(false);
     }
   };
+
+  // Evaluate with AI
+  const handleEvaluate = async () => {
+    if (!submission) return;
+    setIsEvaluating(true);
+    try {
+      const result = await writingEvaluationService.evaluateSubmission(
+        submission.id,
+        submission.task_type
+      );
+      setEvaluation(result);
+    } catch (err: any) {
+      setError(err?.message || "Failed to evaluate essay");
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  // Load existing evaluation when submission is loaded
+  const loadEvaluation = useCallback(async () => {
+    if (!submission) return;
+    try {
+      const result = await writingEvaluationService.getEvaluation(submission.id);
+      setEvaluation(result);
+    } catch {
+      // No evaluation yet — that's fine
+    }
+  }, [submission]);
+
+  useEffect(() => {
+    if (submission?.is_locked && !evaluation) {
+      void loadEvaluation();
+    }
+  }, [submission?.is_locked, loadEvaluation, evaluation]);
 
   // Resume existing submission
   const resumeSubmission = async (sub: WritingWorkspaceSubmission) => {
@@ -387,19 +424,72 @@ export default function WritingWorkspacePage() {
                 <span className="text-xs text-muted-foreground">Status</span>
                 <p className="font-bold text-green-600">Submitted</p>
               </div>
+              <div>
+                <span className="text-xs text-muted-foreground">Evaluation</span>
+                <p className="font-bold text-amber-600">
+                  {evaluation?.evaluation_status === "evaluated" ? "Completed" :
+                   evaluation?.evaluation_status === "pending" ? "Pending" :
+                   "Not started"}
+                </p>
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Your essay is locked. Click &quot;Evaluate with AI&quot; below to receive a
+              full assessment across all four IELTS criteria. This is an AI
+              estimate, not an official IELTS score.
+            </p>
             {warnings.length > 0 && (
               <div className="text-xs text-amber-600">
                 Your submission has warnings that will be noted in evaluation.
               </div>
             )}
+            {evaluation?.evaluation_status === "evaluated" && evaluation.overall_band !== null && (
+              <div className="mt-3 p-3 rounded-lg bg-green-50/30 border border-green-200/30">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Overall Band</span>
+                  <span className="text-2xl font-bold text-green-700 dark:text-green-300">
+                    {evaluation.overall_band.toFixed(1)}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Confidence: {(evaluation.confidence || 0).toFixed(2)}
+                  {" · "} AI estimate (not official IELTS)
+                </p>
+              </div>
+            )}
+            <Button
+              size="sm"
+              onClick={handleEvaluate}
+              disabled={isEvaluating || evaluation?.evaluation_status === "evaluated"}
+              className="w-full mt-2"
+            >
+              {isEvaluating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Evaluating...
+                </>
+              ) : (
+                <>
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Evaluate with AI
+                </>
+              )}
+            </Button>
           </div>
           <ModalFooter>
             <Button size="sm" onClick={() => setShowSummary(false)}>
               Close
             </Button>
           </ModalFooter>
-        </Modal>
+         </Modal>
+
+        {/* Evaluation Detail Modal */}
+        {evaluation && evaluation.evaluation_status === "evaluated" && evaluation.criteria && (
+          <EvaluationDetailModal
+            evaluation={evaluation}
+            onClose={() => setEvaluation(null)}
+          />
+        )}
       </div>
     </DashboardLayout>
   );
@@ -743,5 +833,167 @@ function Pause(props: React.SVGProps<SVGSVGElement>) {
       <rect x="6" y="6" width="4" height="12" />
       <rect x="14" y="6" width="4" height="12" />
     </svg>
+  );
+}
+
+// ─── Evaluation Detail Modal Component ──────────────────────────────────
+function EvaluationDetailModal({
+  evaluation,
+  onClose,
+}: {
+  evaluation: WritingEvaluation;
+  onClose: () => void;
+}) {
+  const {
+    overall_band,
+    confidence,
+    criteria,
+    strengths,
+    weaknesses,
+    errors,
+    suggestions,
+    word_count,
+    is_estimate,
+  } = evaluation;
+
+  const criterionOrder: (keyof typeof criteria)[] = [
+    "task_response",
+    "coherence_cohesion",
+    "lexical_resource",
+    "grammatical_range_accuracy",
+  ];
+
+  return (
+    <Modal isOpen={true} onClose={onClose} className="max-w-4xl">
+      <ModalHeader>
+        <ModalTitle className="flex items-center gap-2">
+          <BarChart3 className="h-5 w-5 text-primary" />
+          AI Writing Evaluation
+        </ModalTitle>
+      </ModalHeader>
+      <div className="max-h-[70vh] overflow-y-auto py-4 space-y-6">
+        {/* Overall band */}
+        <div className="flex items-center justify-center gap-4 p-4 bg-primary/5 rounded-lg border">
+          <div className="text-center">
+            <span className="text-sm text-muted-foreground">Overall Band</span>
+            <p className="text-4xl font-bold text-primary">
+              {overall_band?.toFixed(1) ?? "—"}
+            </p>
+          </div>
+          <div className="text-center">
+            <span className="text-sm text-muted-foreground">Confidence</span>
+            <p className="text-2xl font-bold">
+              {(confidence || 0).toFixed(2)}
+            </p>
+          </div>
+        </div>
+        {is_estimate && (
+          <p className="text-xs text-muted-foreground text-center">
+            AI estimate — this is NOT an official IELTS score.
+          </p>
+        )}
+
+        {/* Criterion breakdown */}
+        <div className="space-y-4">
+          {criterionOrder.map((key) => {
+            const c = criteria[key];
+            return (
+              <Card key={key}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center justify-between text-base">
+                    <span>{c.label}</span>
+                    <Badge variant="outline" className="text-lg font-bold">
+                      {c.band.toFixed(1)}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div>
+                    <span className="font-medium text-green-700">Strength:</span>{" "}
+                    <span className="text-muted-foreground">{c.strength}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-amber-700">Weakness:</span>{" "}
+                    <span className="text-muted-foreground">{c.weakness}</span>
+                  </div>
+                  {c.errors.length > 0 && (
+                    <div>
+                      <span className="font-medium text-red-700">Errors:</span>
+                      <ul className="list-disc list-inside text-muted-foreground mt-1">
+                        {c.errors.map((err, i) => (
+                          <li key={`err-${key}-${i}`}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {c.suggestions.length > 0 && (
+                    <div>
+                      <span className="font-medium text-blue-700">Suggestions:</span>
+                      <ul className="list-disc list-inside text-muted-foreground mt-1">
+                        {c.suggestions.map((s, i) => (
+                          <li key={`sug-${key}-${i}`}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Aggregated insights */}
+        {(strengths.length > 0 || weaknesses.length > 0 || errors.length > 0 || suggestions.length > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Detailed Insights</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {strengths.length > 0 && (
+                <div>
+                  <span className="font-medium">Strengths:</span>
+                  <ul className="list-disc list-inside">
+                    {strengths.map((s, i) => <li key={`s-${i}`}>{s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {weaknesses.length > 0 && (
+                <div>
+                  <span className="font-medium">Weaknesses:</span>
+                  <ul className="list-disc list-inside">
+                    {weaknesses.map((w, i) => <li key={`w-${i}`}>{w}</li>)}
+                  </ul>
+                </div>
+              )}
+              {errors.length > 0 && (
+                <div>
+                  <span className="font-medium">Specific Errors:</span>
+                  <ul className="list-disc list-inside">
+                    {errors.map((e, i) => <li key={`e-${i}`}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+              {suggestions.length > 0 && (
+                <div>
+                  <span className="font-medium">Improvement Suggestions:</span>
+                  <ul className="list-disc list-inside">
+                    {suggestions.map((s, i) => <li key={`i-${i}`}>{s}</li>)}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        <p className="text-xs text-muted-foreground text-center">
+          Word count: {word_count} · Source: {evaluation.source}
+        </p>
+      </div>
+      <ModalFooter>
+        <Button size="sm" variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
