@@ -10,6 +10,7 @@ from app.ai.prompts import (
     IELTS_WRITING_ASSESSOR_PROMPT,
     IELTS_SPEAKING_ASSESSOR_PROMPT,
     IELTS_WRITING_ERROR_ANALYSIS_PROMPT,
+    IELTS_IMPROVEMENT_PLAN_PROMPT,
 )
 
 logger = logging.getLogger(__name__)
@@ -284,6 +285,141 @@ def _surrounding_sentence(text: str, pos: int) -> str:
         if idx != -1:
             end = min(end, idx + 1)
     return text[start:end].strip()[:300]
+
+
+def _rank_weaknesses(criteria_bands: Dict[str, Any]) -> List[str]:
+    """Return criterion keys sorted ascending by band (weakest first)."""
+    valid = {k: v for k, v in criteria_bands.items() if isinstance(v, (int, float))}
+    return [k for k, _ in sorted(valid.items(), key=lambda kv: kv[1])]
+
+
+def _normalize_improvement_plan(plan: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and shape the AI improvement-plan response into stable shape."""
+    return {
+        "current_level_description": str(plan.get("current_level_description", "") or "")[:500],
+        "target_level_description": str(plan.get("target_level_description", "") or "")[:500],
+        "specific_changes": _coerce_list(plan.get("specific_changes"))[:10],
+        "practice_exercises": _coerce_list(plan.get("practice_exercises"))[:8],
+        "recommended_resources": _coerce_list(plan.get("recommended_resources"))[:10],
+        "suggested_mission": _coerce_dict(plan.get("suggested_mission")),
+    }
+
+
+def _coerce_list(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _coerce_dict(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return value
+
+
+def _fallback_improvement_plan(context: Dict[str, Any]) -> Dict[str, Any]:
+    """Deterministic improvement plan when no AI provider is available."""
+    criteria_bands = context.get("criteria_bands", {}) or {}
+    weaknesses = _rank_weaknesses(criteria_bands)
+    band_gap = context.get("band_gap", 0.0)
+    target = context.get("target_band", 7.0)
+    current = context.get("current_band", 0.0)
+    task_type = context.get("task_type", "task_2")
+    error_types = context.get("error_types", "none")
+
+    # Scale depth by gap size.
+    if band_gap >= 3.0:
+        n_changes, n_exercises, n_resources = 6, 5, 6
+    elif band_gap >= 1.5:
+        n_changes, n_exercises, n_resources = 5, 3, 5
+    else:
+        n_changes, n_exercises, n_resources = 3, 2, 3
+
+    criterion_labels = {
+        "task_response": "Task Response" if task_type == "task_2" else "Task Achievement",
+        "coherence_cohesion": "Coherence & Cohesion",
+        "lexical_resource": "Lexical Resource",
+        "grammatical_range_accuracy": "Grammatical Range & Accuracy",
+    }
+
+    changes: List[Dict[str, Any]] = []
+    for wk in weaknesses[:n_changes]:
+        label = criterion_labels.get(wk, wk)
+        changes.append({
+            "area": label,
+            "change": f"Focus on {label}: your current band here is the lowest in your assessment. Work through targeted exercises for this criterion.",
+            "priority": "high",
+        })
+    while len(changes) < n_changes:
+        changes.append({
+            "area": "Task Response",
+            "change": "Fully address every part of the question and extend your ideas with specific examples.",
+            "priority": "medium",
+        })
+
+    exercises = [
+        {
+            "title": f"Timed {task_type.replace('_', ' ').title()} Practice",
+            "description": f"Write one {task_type.replace('_', ' ')} under strict timed conditions (40 min for Task 2), then review your error analysis.",
+            "skill_focus": task_type,
+            "estimated_minutes": 50,
+        },
+        {
+            "title": "Error Analysis Review",
+            "description": "Re-read the specific errors flagged in your evaluation and write corrected versions of each problematic sentence.",
+            "skill_focus": "grammar",
+            "estimated_minutes": 30,
+        },
+    ][:n_exercises]
+
+    resources = []
+    resource_pool = [
+        ("IELTS Liz — Task 2 Band 8+ Samples", "https://ieltsliz.com/ielts-writing-task-2/", "Model answers at Band 8+ level for your target."),
+        ("IELTS Simon — Vocabulary Builder", "https://ieltssimon.com/category/writing/", "Daily vocabulary and topic-specific word lists."),
+        ("British Council — Essay Planning Guide", "https://takeielts.britishcouncil.org/writing-task-2", "Official planning and structuring advice."),
+    ]
+    for title, url, why in resource_pool[:n_resources]:
+        resources.append({"title": title, "url": url, "why": why})
+
+    mission = {
+        "title": f"Band {target:.0f} {task_type.replace('_', ' ').title()} Practice",
+        "skill": "writing",
+        "sub_skill": task_type,
+        "duration_minutes": 60,
+        "description": f"One timed {task_type.replace('_', ' ')} essay plus detailed self-review against your error analysis.",
+    }
+
+    return {
+        "current_level_description": f"You are currently estimated at Band {current:.1f} on {task_type.replace('_', ' ')}. Your weakest areas are {', '.join(weaknesses[:3]) if weaknesses else 'being identified'}.",
+        "target_level_description": f"A Band {target:.1f} response requires fully addressing every part of the question, clear paragraphing, a wide range of vocabulary used accurately, and a mix of simple and complex sentence structures with minimal errors.",
+        "specific_changes": changes,
+        "practice_exercises": exercises,
+        "recommended_resources": resources,
+        "suggested_mission": mission,
+    }
+
+
+def _build_improvement_prompt(context: Dict[str, Any]) -> str:
+    """Build the user message for the improvement-plan call.
+
+    Uses string replacement (not str.format) because the system prompt
+    contains literal JSON braces that would conflict with formatting.
+    """
+    system_prompt = IELTS_IMPROVEMENT_PLAN_PROMPT
+    # The system prompt already has the schema; build the user message with
+    # the context substituted.
+    return (
+        f"The student answered {context.get('task_type', 'task_2')}.\n"
+        f"Current band: {context.get('current_band', 0.0)}\n"
+        f"Target band: {context.get('target_band', 0.0)}\n"
+        f"Band gap: {context.get('band_gap', 0.0)}\n"
+        f"Word count: {context.get('word_count', 0)}\n"
+        f"Criteria bands: {context.get('criteria_bands', {})}\n"
+        f"Main weaknesses (ranked): {context.get('weaknesses', 'none')}\n"
+        f"Error types detected: {context.get('error_types', 'none')}\n\n"
+        f"Essay text:\n{context.get('essay_text', '')}\n\n"
+        f"Now produce the JSON plan object following your instructions."
+    )
 
 
 def _round_band(value: float) -> float:
@@ -803,6 +939,70 @@ class AIService:
         for i, err in enumerate(errors):
             err["id"] = f"err-{i + 1}"
         return errors
+
+    async def generate_improvement_plan(
+        self,
+        essay_text: str,
+        evaluation: Dict[str, Any],
+        target_band: float,
+    ) -> Dict[str, Any]:
+        """
+        Generate a personalized improvement plan using the student's actual
+        evaluation data.  Falls back to a deterministic plan when no API key
+        is set or the call fails.
+        """
+        criteria_bands = evaluation.get("criteria_bands", {}) or {}
+        error_analysis = evaluation.get("error_analysis") or []
+        error_types = sorted({e.get("error_type", "Grammar") for e in error_analysis})
+        weaknesses = _rank_weaknesses(criteria_bands)
+
+        context = {
+            "task_type": evaluation.get("task_type", "task_2"),
+            "current_band": evaluation.get("overall_band") or 0.0,
+            "target_band": target_band,
+            "band_gap": round(target_band - (evaluation.get("overall_band") or 0.0), 1),
+            "word_count": evaluation.get("word_count", 0),
+            "criteria_bands": criteria_bands,
+            "weaknesses": ", ".join(weaknesses) or "none identified",
+            "error_types": ", ".join(error_types) if error_types else "none",
+            "essay_text": essay_text[:2000],
+        }
+
+        if self.api_key:
+            try:
+                prompt = _build_improvement_prompt(context)
+                async with AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "gpt-4o-mini",
+                            "messages": [
+                                {"role": "system", "content": IELTS_IMPROVEMENT_PLAN_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ],
+                            "temperature": 0.3,
+                            "response_format": {"type": "json_object"},
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    content = data["choices"][0]["message"]["content"] or ""
+                    content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
+                    parsed = json.loads(content)
+                    if isinstance(parsed, dict):
+                        result = _normalize_improvement_plan(parsed)
+                        result["source"] = "ai"
+                        return result
+            except Exception as e:
+                logger.warning("AI improvement plan fallback: %s", e)
+
+        result = _fallback_improvement_plan(context)
+        result["source"] = "deterministic_fallback"
+        return result
 
     async def analyze_speaking(self, user_transcript: str) -> Dict[str, Any]:
         """

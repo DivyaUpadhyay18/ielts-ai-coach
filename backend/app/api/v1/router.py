@@ -39,6 +39,7 @@ from app.api.v1.mentor_memory import router as mentor_memory_router
 from app.api.v1.reflections import router as reflections_router
 from app.api.v1.writing_workspace import router as writing_workspace_router
 from app.api.v1.writing_evaluation import router as writing_evaluation_router
+from app.api.v1.writing_improvement_plan import router as writing_improvement_plan_router
 
 router = APIRouter()
 
@@ -82,3 +83,4 @@ router.include_router(ai_recommendations_router, prefix="/ai-recommendations", t
 router.include_router(mentor_memory_router, prefix="/mentor-memory", tags=["AI Mentor Memory"])
 router.include_router(writing_workspace_router, prefix="/writing-workspace", tags=["Writing Workspace"])
 router.include_router(writing_evaluation_router, prefix="/writing-evaluations", tags=["Writing Evaluations"])
+router.include_router(writing_improvement_plan_router, prefix="/writing-improvement-plans", tags=["Writing Improvement Plans"])

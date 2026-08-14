@@ -1683,6 +1683,8 @@ import type {
   WritingWorkspaceSubmissionSave,
   WritingWorkspaceSubmissionSubmit,
   WritingWorkspaceSubmissionListResponse,
+  WritingImprovementPlan,
+  WritingImprovementPlanListResponse,
 } from '@/types/writing-workspace';
 
 export const writingWorkspaceService = {
@@ -1756,6 +1758,29 @@ export const writingEvaluationService = {
 
   listEvaluations: async (limit = 20): Promise<WritingEvaluationListResponse> => {
     const response = await authApi.get('/writing-evaluations', { params: { limit } });
+    return response.data;
+  },
+};
+
+// Writing Improvement Plans service (mirrors /api/v1/writing-improvement-plans/*)
+// ─────────────────────────────────────────────────────────────
+export const writingImprovementPlanService = {
+  generatePlan: async (
+    submissionId: string,
+    targetBand?: number,
+  ): Promise<WritingImprovementPlan> => {
+    const params = targetBand !== undefined ? { target_band: targetBand } : undefined;
+    const response = await authApi.post(`/writing-improvement-plans/${submissionId}`, null, { params });
+    return response.data;
+  },
+
+  getPlan: async (evaluationId: string): Promise<WritingImprovementPlan> => {
+    const response = await authApi.get(`/writing-improvement-plans/${evaluationId}`);
+    return response.data;
+  },
+
+  listPlans: async (limit = 20): Promise<WritingImprovementPlanListResponse> => {
+    const response = await authApi.get('/writing-improvement-plans', { params: { limit } });
     return response.data;
   },
 };

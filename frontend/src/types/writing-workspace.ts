@@ -178,3 +178,68 @@ export interface WritingEvaluationListResponse {
   results: WritingEvaluationSummary[];
   total: number;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Writing Improvement Plan types ("Improve My Band")
+// ─────────────────────────────────────────────────────────────
+
+export type PlanPriority = "high" | "medium" | "low";
+
+export type PlanSkillFocus =
+  | "task_1"
+  | "task_2"
+  | "grammar"
+  | "vocabulary"
+  | "cohesion";
+
+export interface ImprovementPlanChange {
+  area: string;
+  change: string;
+  priority: PlanPriority;
+}
+
+export interface ImprovementPlanExercise {
+  title: string;
+  description: string;
+  skill_focus: PlanSkillFocus;
+  estimated_minutes: number;
+}
+
+export interface ImprovementPlanResource {
+  title: string;
+  url: string;
+  why: string;
+}
+
+export interface ImprovementPlanMission {
+  title: string;
+  skill: string;
+  sub_skill: string;
+  duration_minutes: number;
+  description: string;
+}
+
+export interface WritingImprovementPlan {
+  id: string;
+  evaluation_id: string;
+  submission_id: string;
+  task_type: WritingTaskType;
+  current_band: number;
+  target_band: number;
+  band_gap: number;
+  weaknesses: string[];
+  current_level_description: string;
+  target_level_description: string;
+  specific_changes: ImprovementPlanChange[];
+  practice_exercises: ImprovementPlanExercise[];
+  recommended_resources: ImprovementPlanResource[];
+  suggested_mission: ImprovementPlanMission;
+  is_estimate: boolean;
+  source: string;
+  created_at: string | null;
+}
+
+export interface WritingImprovementPlanListResponse {
+  results: WritingImprovementPlan[];
+  total: number;
+}

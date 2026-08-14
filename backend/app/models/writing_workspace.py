@@ -164,3 +164,61 @@ class WritingEvaluationListResponse(BaseModel):
     """List of evaluation summaries."""
     results: List[WritingEvaluationSummary]
     total: int
+
+
+class ImprovementPlanChange(BaseModel):
+    """A single concrete change recommended to the student."""
+    area: str
+    change: str
+    priority: str  # high | medium | low
+
+
+class ImprovementPlanExercise(BaseModel):
+    """A single practice exercise in the plan."""
+    title: str
+    description: str
+    skill_focus: str
+    estimated_minutes: int
+
+
+class ImprovementPlanResource(BaseModel):
+    """A recommended resource in the plan."""
+    title: str
+    url: str
+    why: str
+
+
+class ImprovementPlanMission(BaseModel):
+    """A suggested mission to add to the study plan."""
+    title: str
+    skill: str
+    sub_skill: str
+    duration_minutes: int
+    description: str
+
+
+class WritingImprovementPlanResponse(BaseModel):
+    """Full improvement plan response returned to the client."""
+    id: str
+    evaluation_id: str
+    submission_id: str
+    task_type: str
+    current_band: float
+    target_band: float
+    band_gap: float
+    weaknesses: List[str] = []
+    current_level_description: str
+    target_level_description: str
+    specific_changes: List[ImprovementPlanChange] = []
+    practice_exercises: List[ImprovementPlanExercise] = []
+    recommended_resources: List[ImprovementPlanResource] = []
+    suggested_mission: ImprovementPlanMission = None  # type: ignore[assignment]
+    is_estimate: bool = True
+    source: str = "ai"
+    created_at: Optional[str] = None
+
+
+class WritingImprovementPlanListResponse(BaseModel):
+    """List of improvement plan summaries."""
+    results: List[WritingImprovementPlanResponse]
+    total: int

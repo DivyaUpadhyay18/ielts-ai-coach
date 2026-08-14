@@ -9,14 +9,16 @@ import {
   FileText,
   Save,
   BarChart3,
-  AlertTriangle,
-  CheckCircle2,
-  X,
-  BookOpen,
-  Clock,
-  Target,
-  RefreshCw,
-  Loader2,
+   AlertTriangle,
+   CheckCircle2,
+   X,
+   BookOpen,
+   Clock,
+   Target,
+   RefreshCw,
+   Loader2,
+   TrendingUp,
+   ExternalLink,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -25,13 +27,14 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Modal, ModalHeader, ModalTitle, ModalFooter } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
-import { writingWorkspaceService, writingEvaluationService } from "@/services/api";
+import { writingWorkspaceService, writingEvaluationService, writingImprovementPlanService } from "@/services/api";
 import type {
   WritingWorkspacePrompt,
   WritingWorkspaceSubmission,
   WritingWorkspacePromptsResponse,
   WritingEvaluation,
   WritingError,
+  WritingImprovementPlan,
 } from "@/types/writing-workspace";
 import {
   WRITING_WORKSPACE_TASK_LABELS,
@@ -88,6 +91,9 @@ export default function WritingWorkspacePage() {
   const [showSummary, setShowSummary] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluation, setEvaluation] = useState<WritingEvaluation | null>(null);
+  const [improvementPlan, setImprovementPlan] = useState<WritingImprovementPlan | null>(null);
+  const [isPlanLoading, setIsPlanLoading] = useState(false);
+  const [showPlanModal, setShowPlanModal] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load prompts
@@ -199,6 +205,24 @@ export default function WritingWorkspacePage() {
       setError(err?.message || "Failed to evaluate essay");
     } finally {
       setIsEvaluating(false);
+    }
+  };
+
+  const handleGeneratePlan = async (targetBand?: number) => {
+    if (!submission) return;
+    setIsPlanLoading(true);
+    setError(null);
+    try {
+      const plan = await writingImprovementPlanService.generatePlan(
+        submission.id,
+        targetBand
+      );
+      setImprovementPlan(plan);
+      setShowPlanModal(true);
+    } catch (err: any) {
+      setError(err?.message || "Failed to generate improvement plan");
+    } finally {
+      setIsPlanLoading(false);
     }
   };
 
@@ -458,31 +482,54 @@ export default function WritingWorkspacePage() {
                 </p>
               </div>
             )}
-            <Button
-              size="sm"
-              onClick={handleEvaluate}
-              disabled={isEvaluating || evaluation?.evaluation_status === "evaluated"}
-              className="w-full mt-2"
-            >
-              {isEvaluating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Evaluating...
-                </>
-              ) : (
-                <>
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Evaluate with AI
-                </>
+             <Button
+               size="sm"
+               onClick={handleEvaluate}
+               disabled={isEvaluating || evaluation?.evaluation_status === "evaluated"}
+               className="w-full mt-2"
+             >
+               {isEvaluating ? (
+                 <>
+                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                   Evaluating...
+                 </>
+               ) : (
+                 <>
+                   <BarChart3 className="h-4 w-4 mr-2" />
+                   Evaluate with AI
+                 </>
+               )}
+             </Button>
+              {evaluation?.overall_band != null && (
+                <div className="mt-3 pt-3 border-t border-border space-y-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleGeneratePlan()}
+                    disabled={isPlanLoading}
+                    className="w-full"
+                  >
+                    {isPlanLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Generating plan...
+                      </>
+                    ) : (
+                      <>
+                        <Target className="h-4 w-4 mr-2" />
+                        Improve My Band
+                      </>
+                    )}
+                  </Button>
+                </div>
               )}
-            </Button>
-          </div>
-          <ModalFooter>
-            <Button size="sm" onClick={() => setShowSummary(false)}>
-              Close
-            </Button>
-          </ModalFooter>
-         </Modal>
+           </div>
+           <ModalFooter>
+             <Button size="sm" onClick={() => setShowSummary(false)}>
+               Close
+             </Button>
+           </ModalFooter>
+          </Modal>
 
         {/* Evaluation Detail Modal */}
         {evaluation && evaluation.evaluation_status === "evaluated" && evaluation.criteria && (
@@ -490,6 +537,15 @@ export default function WritingWorkspacePage() {
             evaluation={evaluation}
             essayText={essayText}
             onClose={() => setEvaluation(null)}
+            onImproveMyBand={() => handleGeneratePlan()}
+          />
+        )}
+
+        {/* Improve My Band Modal */}
+        {showPlanModal && improvementPlan && (
+          <ImproveMyBandModal
+            plan={improvementPlan}
+            onClose={() => setShowPlanModal(false)}
           />
         )}
       </div>
@@ -945,10 +1001,12 @@ function EvaluationDetailModal({
   evaluation,
   essayText,
   onClose,
+  onImproveMyBand,
 }: {
   evaluation: WritingEvaluation;
   essayText: string;
   onClose: () => void;
+  onImproveMyBand: () => void;
 }) {
   const {
     overall_band,
@@ -1243,7 +1301,212 @@ function EvaluationDetailModal({
         <p className="text-xs text-muted-foreground text-center">
           Word count: {word_count} · Source: {evaluation.source}
         </p>
+        <div className="pt-2 border-t border-border">
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              onClose();
+              onImproveMyBand();
+            }}
+          >
+            <Target className="h-4 w-4 mr-2" />
+            Improve My Band
+          </Button>
+        </div>
       </div>
+      <ModalFooter>
+        <Button size="sm" variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+// ─── Improve My Band Modal ───────────────────────────────────────────
+function ImproveMyBandModal({
+  plan,
+  onClose,
+}: {
+  plan: WritingImprovementPlan;
+  onClose: () => void;
+}) {
+  const PRIORITY_COLOR: Record<string, string> = {
+    high: "bg-red-500/15 text-red-600 dark:text-red-300 border-red-400/50",
+    medium: "bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-400/50",
+    low: "bg-blue-500/15 text-blue-600 dark:text-blue-300 border-blue-400/50",
+  };
+
+  return (
+    <Modal isOpen={true} onClose={onClose} className="max-w-4xl">
+      <ModalHeader>
+        <ModalTitle className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-primary" />
+          Improve My Band
+        </ModalTitle>
+      </ModalHeader>
+
+      <div className="max-h-[70vh] overflow-y-auto py-4 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <span className="text-xs text-muted-foreground">Current Band</span>
+              <p className="text-3xl font-bold text-primary">{plan.current_band.toFixed(1)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <span className="text-xs text-muted-foreground">Target Band</span>
+              <p className="text-3xl font-bold text-green-600 dark:text-green-400">{plan.target_band.toFixed(1)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <span className="text-xs text-muted-foreground">Gap to Target</span>
+              <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">+{plan.band_gap.toFixed(1)}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {plan.weaknesses.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Main Weaknesses</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="list-decimal list-inside text-sm space-y-1">
+                {plan.weaknesses.map((w, i) => (
+                  <li key={`weak-${i}`} className="text-muted-foreground capitalize">
+                    {w.replace(/_/g, " ")}
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm text-amber-600 dark:text-amber-400">
+                What the student is doing now
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">{plan.current_level_description}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm text-green-600 dark:text-green-400">
+                What a Band {plan.target_band.toFixed(0)} response requires
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">{plan.target_level_description}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {plan.specific_changes.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Specific Changes to Make</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {plan.specific_changes.map((c, i) => (
+                <div key={`change-${i}`} className="border border-border rounded-lg p-3">
+                  <Badge className={`text-xs mb-1 ${PRIORITY_COLOR[c.priority] ?? PRIORITY_COLOR.medium}`}>
+                    {c.area} · {c.priority}
+                  </Badge>
+                  <p className="text-sm text-muted-foreground">{c.change}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {plan.practice_exercises.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Practice Exercises</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {plan.practice_exercises.map((ex, i) => (
+                <div key={`ex-${i}`} className="border border-border rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-sm">{ex.title}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {ex.estimated_minutes} min
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{ex.description}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {plan.recommended_resources.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Recommended Resources</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {plan.recommended_resources.map((res, i) => (
+                <div key={`res-${i}`} className="border border-border rounded-lg p-3">
+                  <div className="flex items-start justify-between mb-1">
+                    <a
+                      href={res.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-sm hover:text-primary flex items-center gap-1"
+                    >
+                      {res.title}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{res.why}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {plan.suggested_mission && plan.suggested_mission.title && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Target className="h-4 w-4 text-primary" />
+                Suggested Next Writing Mission
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <p className="font-medium">{plan.suggested_mission.title}</p>
+                <p className="text-sm text-muted-foreground">
+                  {plan.suggested_mission.description}
+                </p>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <Badge variant="outline" className="text-xs">
+                    {plan.suggested_mission.sub_skill === "task_1" ? "Task 1" : "Task 2"}
+                  </Badge>
+                  <span>{plan.suggested_mission.duration_minutes} min</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {plan.is_estimate && (
+          <p className="text-xs text-muted-foreground text-center">
+            This plan is an AI estimate based on your evaluation — not official IELTS advice.
+          </p>
+        )}
+      </div>
+
       <ModalFooter>
         <Button size="sm" variant="outline" onClick={onClose}>
           Close

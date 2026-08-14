@@ -227,6 +227,7 @@ from app.services.mentor_memory_service import MentorMemoryService, mentor_memor
 from app.services.ai_mentor_service import AIMentorService, ai_mentor_service
 from app.services.writing_workspace_service import WritingWorkspaceService
 from app.services.writing_evaluation_engine import WritingEvaluationEngine
+from app.services.writing_improvement_plan_engine import WritingImprovementPlanEngine
 
 
 # Writing Workspace service factory
@@ -239,6 +240,12 @@ def get_writing_workspace_service() -> WritingWorkspaceService:
 def get_writing_evaluation_engine() -> WritingEvaluationEngine:
     from app.db.session import db_session
     return WritingEvaluationEngine(db_session)
+
+
+# Writing Improvement Plan Engine factory
+def get_writing_improvement_plan_engine() -> WritingImprovementPlanEngine:
+    from app.db.session import db_session
+    return WritingImprovementPlanEngine(db_session)
 
 
 def get_user_repo() -> UserRepository:
