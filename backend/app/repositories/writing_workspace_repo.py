@@ -145,6 +145,7 @@ class WritingWorkspaceRepository(BaseRepository):
             "weaknesses": [],
             "errors": [],
             "suggestions": [],
+            "error_analysis": [],
             "word_count": int(word_count or 0),
             "is_estimate": True,
             "source": "pending",

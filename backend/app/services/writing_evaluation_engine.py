@@ -115,6 +115,20 @@ class WritingEvaluationEngine:
             prompt_text=prompt_text,
         )
 
+        # Run the detailed per-issue error analysis (backend-only). Never
+        # fatal: if it fails we store an empty list rather than failing the
+        # whole evaluation.
+        error_analysis: List[Dict[str, Any]] = []
+        try:
+            error_result = await self.ai_service.analyze_writing_errors(
+                essay_text=essay_text,
+                task_type=task_type,
+                prompt_text=prompt_text,
+            )
+            error_analysis = (error_result or {}).get("error_analysis") or []
+        except Exception as e:  # noqa: BLE001 - best-effort error analysis
+            logger.warning("writing error analysis failed user=%s: %s", user_id, e)
+
         # Ensure a pending record exists (for essays submitted before the
         # evaluation infrastructure existed).
         evaluation = self.repo.get_evaluation(submission_id, user_id)
@@ -133,6 +147,7 @@ class WritingEvaluationEngine:
             submission_id=submission_id,
             task_type=task_type,
             ai_result=ai_result,
+            error_analysis=error_analysis,
         )
 
         # Update the submission with the AI evaluation result.
@@ -189,12 +204,14 @@ class WritingEvaluationEngine:
         submission_id: str,
         task_type: str,
         ai_result: Dict[str, Any],
+        error_analysis: List[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Update an evaluation record with the AI-computed scores.
 
-        Called after the AI service returns the 4-criteria assessment.
-        Flips the record status from 'pending' to 'evaluated'.
+        Called after the AI service returns the 4-criteria assessment, plus
+        the optional per-issue error analysis. Flips the record status from
+        'pending' to 'evaluated'.
         """
         criteria = ai_result.get("criteria", {}) or {}
 
@@ -245,6 +262,7 @@ class WritingEvaluationEngine:
             "weaknesses": self._collect_field(criteria, "weakness"),
             "errors": self._collect_list_field(criteria, "errors"),
             "suggestions": self._collect_list_field(criteria, "suggestions"),
+            "error_analysis": list(error_analysis or []),
             "word_count": int(ai_result.get("word_count") or 0),
             "is_estimate": True,
             "source": ai_result.get("source", "ai"),
@@ -324,6 +342,7 @@ class WritingEvaluationEngine:
             "weaknesses": evaluation.get("weaknesses") or [],
             "errors": evaluation.get("errors") or [],
             "suggestions": evaluation.get("suggestions") or [],
+            "error_analysis": evaluation.get("error_analysis") or [],
             "evaluated_at": evaluation.get("evaluated_at"),
             "evaluation_status": evaluation.get("status") or "pending",
             "is_official": False,

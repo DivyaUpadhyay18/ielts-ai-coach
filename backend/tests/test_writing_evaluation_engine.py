@@ -264,6 +264,16 @@ class TestWritingEvaluationEngine:
             "errors": ["e1", "e2"],
             "suggestions": ["s1", "s2", "s3", "s4"],
         })
+        engine.ai_service.analyze_writing_errors = AsyncMock(return_value={
+            "error_analysis": [
+                {
+                    "id": "err-1", "original": "essay text", "error_type": "Grammar",
+                    "explanation": "why", "correction": "fix", "severity": "major",
+                    "criterion": "grammatical_range_accuracy", "start": 0, "end": 10, "sentence": "",
+                }
+            ],
+            "source": "deterministic_fallback",
+        })
         engine.repo.update_evaluation.return_value = {
             "id": "eval1", "status": "evaluated", "overall_band": 7.0,
             "confidence": 0.85, "criteria_bands": {"task_response": 7.0},
@@ -294,6 +304,9 @@ class TestWritingEvaluationEngine:
         engine.ai_service.analyze_writing = AsyncMock(return_value={
             "criteria": {}, "overall_band": 6.5, "confidence": 0.8,
             "is_estimate": True, "word_count": 100, "source": "ai",
+        })
+        engine.ai_service.analyze_writing_errors = AsyncMock(return_value={
+            "error_analysis": [], "source": "deterministic_fallback",
         })
         engine.repo.update_evaluation.return_value = {
             "id": "existing", "status": "evaluated", "overall_band": 6.5,

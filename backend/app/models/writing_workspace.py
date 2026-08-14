@@ -83,6 +83,29 @@ class SubmissionListResponse(BaseModel):
 
 
 # ─── Evaluation ───────────────────────────────────────────────────────
+class WritingError(BaseModel):
+    """
+    A single detected issue within the essay.
+
+    Carries the original text, category, explanation, suggested correction,
+    severity, the IELTS criterion affected, and character offsets used by the
+    UI to highlight the problematic section in the essay.
+
+    ``correction`` fixes only this one issue — the essay is never rewritten
+    automatically as a whole.
+    """
+    id: str
+    original: str
+    error_type: str
+    explanation: str
+    correction: str
+    severity: str = "minor"  # critical | major | minor
+    criterion: str = "grammatical_range_accuracy"
+    start: int = 0
+    end: int = 0
+    sentence: str = ""
+
+
 class CriterionEvaluation(BaseModel):
     """A single criterion evaluation."""
     band: float
@@ -124,6 +147,7 @@ class WritingEvaluationResponse(BaseModel):
     evaluated_at: Optional[str] = None
     evaluation_status: str = "pending"
     is_official: bool = False
+    error_analysis: Optional[List[WritingError]] = None
 
 
 class WritingEvaluationSummary(BaseModel):

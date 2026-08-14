@@ -31,6 +31,7 @@ import type {
   WritingWorkspaceSubmission,
   WritingWorkspacePromptsResponse,
   WritingEvaluation,
+  WritingError,
 } from "@/types/writing-workspace";
 import {
   WRITING_WORKSPACE_TASK_LABELS,
@@ -487,6 +488,7 @@ export default function WritingWorkspacePage() {
         {evaluation && evaluation.evaluation_status === "evaluated" && evaluation.criteria && (
           <EvaluationDetailModal
             evaluation={evaluation}
+            essayText={essayText}
             onClose={() => setEvaluation(null)}
           />
         )}
@@ -836,12 +838,116 @@ function Pause(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+// ─── Error Analysis UI helpers ──────────────────────────────────────────
+const ERROR_TYPE_COLORS: Record<string, string> = {
+  Grammar: "bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-400/50",
+  Vocabulary: "bg-violet-500/15 text-violet-600 dark:text-violet-300 border-violet-400/50",
+  Spelling: "bg-red-500/15 text-red-600 dark:text-red-300 border-red-400/50",
+  Punctuation: "bg-sky-500/15 text-sky-600 dark:text-sky-300 border-sky-400/50",
+  "Sentence Structure": "bg-orange-500/15 text-orange-600 dark:text-orange-300 border-orange-400/50",
+  Cohesion: "bg-teal-500/15 text-teal-600 dark:text-teal-300 border-teal-400/50",
+  Repetition: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-300 border-fuchsia-400/50",
+  "Word Choice": "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border-indigo-400/50",
+  "Task Response": "bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-400/50",
+};
+
+const SEVERITY_DOT: Record<string, string> = {
+  critical: "bg-red-500",
+  major: "bg-amber-500",
+  minor: "bg-blue-400",
+};
+
+const SEVERITY_LABEL: Record<string, string> = {
+  critical: "Critical",
+  major: "Major",
+  minor: "Minor",
+};
+
+const CRITERION_LABEL: Record<string, string> = {
+  task_response: "Task Response / Achievement",
+  coherence_cohesion: "Coherence & Cohesion",
+  lexical_resource: "Lexical Resource",
+  grammatical_range_accuracy: "Grammatical Range & Accuracy",
+};
+
+/**
+ * Render the essay with clickable, highlighted spans for each detected issue.
+ * Errors with unusable offsets (start === 0 && end === 0) are skipped by the
+ * highlighting but still appear in the error list. Overlapping ranges are
+ * chained so no text is dropped.
+ */
+function HighlightedEssay({
+  text,
+  errors,
+  selectedId,
+  onSelect,
+}: {
+  text: string;
+  errors: WritingError[];
+  selectedId?: string | null;
+  onSelect: (err: WritingError) => void;
+}) {
+  const highlightable = errors.filter(
+    (e) => e.end > e.start && e.start >= 0 && e.end <= text.length + 1
+  );
+  if (highlightable.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+        {text || "—"}
+      </p>
+    );
+  }
+
+  const ranges = highlightable
+    .slice()
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const segments: { text: string; error?: WritingError }[] = [];
+  let pos = 0;
+  for (const err of ranges) {
+    if (err.start > pos) {
+      segments.push({ text: text.slice(pos, err.start) });
+      pos = err.start;
+    }
+    const end = Math.min(err.end, text.length);
+    if (end > pos) {
+      segments.push({ text: text.slice(pos, end), error: err });
+      pos = end;
+    }
+  }
+  if (pos < text.length) segments.push({ text: text.slice(pos) });
+
+  return (
+    <p className="text-sm leading-relaxed whitespace-pre-wrap">
+      {segments.map((seg, i) =>
+        seg.error ? (
+          <button
+            key={`hl-${seg.error.id}-${i}`}
+            type="button"
+            onClick={() => onSelect(seg.error!)}
+            className={`inline px-0.5 rounded font-medium border-b-2 underline decoration-wavy decoration-1 ${
+              ERROR_TYPE_COLORS[seg.error.error_type] ?? ERROR_TYPE_COLORS.Grammar
+            } ${selectedId === seg.error.id ? "ring-2 ring-offset-1 ring-primary/70" : ""}`}
+            title={seg.error.explanation}
+          >
+            {seg.text}
+          </button>
+        ) : (
+          <React.Fragment key={`tx-${i}`}>{seg.text}</React.Fragment>
+        )
+      )}
+    </p>
+  );
+}
+
 // ─── Evaluation Detail Modal Component ──────────────────────────────────
 function EvaluationDetailModal({
   evaluation,
+  essayText,
   onClose,
 }: {
   evaluation: WritingEvaluation;
+  essayText: string;
   onClose: () => void;
 }) {
   const {
@@ -854,7 +960,24 @@ function EvaluationDetailModal({
     suggestions,
     word_count,
     is_estimate,
+    error_analysis,
   } = evaluation;
+
+  const analysisErrors = error_analysis || [];
+
+  // Group issues by error type for a tidy, clickable summary.
+  const grouped = analysisErrors.reduce<Record<string, WritingError[]>>((acc, e) => {
+    if (!acc[e.error_type]) acc[e.error_type] = [];
+    acc[e.error_type].push(e);
+    return acc;
+  }, {});
+  const groupedKeys = Object.keys(grouped);
+
+  const [selectedErrorId, setSelectedErrorId] = useState<string | null>(
+    analysisErrors.length > 0 ? analysisErrors[0].id : null
+  );
+  const selectedError =
+    analysisErrors.find((e) => e.id === selectedErrorId) ?? null;
 
   const criterionOrder: (keyof typeof criteria)[] = [
     "task_response",
@@ -985,6 +1108,138 @@ function EvaluationDetailModal({
           </Card>
         )}
 
+{/* ─── Writing Error Analysis ─── */}
+        {analysisErrors.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-lg font-semibold">Writing Error Analysis</h3>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                {(["critical", "major", "minor"] as const).map((s) => (
+                  <span key={s} className="inline-flex items-center gap-1">
+                    <span className={`h-2.5 w-2.5 rounded-full ${SEVERITY_DOT[s]}`} />
+                    {SEVERITY_LABEL[s]}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">
+                    Your essay
+                    <span className="ml-2 font-normal text-xs text-muted-foreground">
+                      — click any highlighted section
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="max-h-80 overflow-y-auto rounded-md border bg-secondary/20 p-3">
+                  <HighlightedEssay
+                    text={essayText}
+                    errors={analysisErrors}
+                    selectedId={selectedErrorId}
+                    onSelect={(e) => setSelectedErrorId(e.id)}
+                  />
+                </CardContent>
+              </Card>
+              <div className="space-y-3">
+                {/* Grouped, clickable error list */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">
+                      Issues by category ({analysisErrors.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 max-h-52 overflow-y-auto">
+                    {groupedKeys.map((type) => (
+                      <div key={type}>
+                        <div className="mb-1 text-xs font-semibold uppercase tracking-wide">
+                          {type} · {grouped[type].length}
+                        </div>
+                        <div className="space-y-1">
+                          {grouped[type].map((e2) => (
+                            <button
+                              key={e2.id}
+                              type="button"
+                              onClick={() => setSelectedErrorId(e2.id)}
+                              className={`w-full truncate text-left text-sm px-2 py-1.5 rounded-md border transition-colors ${
+                                selectedErrorId === e2.id
+                                  ? "ring-1 ring-primary bg-primary/10"
+                                  : "hover:bg-secondary/50"
+                              } ${ERROR_TYPE_COLORS[e2.error_type] ?? ""}`}
+                            >
+                              <span className="inline-flex items-center gap-1.5">
+                                <span
+                                  className={`h-2 w-2 flex-shrink-0 rounded-full ${
+                                    SEVERITY_DOT[e2.severity] ?? "bg-gray-400"
+                                  }`}
+                                />
+                                <span className="truncate inline-block align-middle">
+                                  “{e2.original}”
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                {/* Detail panel */}
+                {selectedError && (
+                  <Card className="border-l-4 border-l-primary">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-xs font-semibold border ${
+                            ERROR_TYPE_COLORS[selectedError.error_type] ?? ""
+                          }`}
+                        >
+                          {selectedError.error_type}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              SEVERITY_DOT[selectedError.severity] ?? "bg-gray-400"
+                            }`}
+                          />
+                          {SEVERITY_LABEL[selectedError.severity] ?? selectedError.severity}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {CRITERION_LABEL[selectedError.criterion] ?? selectedError.criterion}
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                      <div>
+                        <div className="font-medium text-red-600 dark:text-red-400">
+                          What is wrong?
+                        </div>
+                        <p className="text-muted-foreground">“{selectedError.original}”</p>
+                      </div>
+                      <div>
+                        <div className="font-medium text-amber-600 dark:text-amber-400">
+                          Why is it wrong?
+                        </div>
+                        <p className="text-muted-foreground">{selectedError.explanation}</p>
+                      </div>
+                      <div>
+                        <div className="font-medium text-green-600 dark:text-green-400">
+                          How can I improve?
+                        </div>
+                        <p className="text-muted-foreground">{selectedError.correction}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Apply this fix yourself — your essay is never rewritten automatically.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         <p className="text-xs text-muted-foreground text-center">
           Word count: {word_count} · Source: {evaluation.source}
         </p>

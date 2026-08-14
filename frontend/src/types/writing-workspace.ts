@@ -101,6 +101,32 @@ export const WRITING_WORKSPACE_TASK_DESCRIPTIONS: Record<WritingTaskType, string
 
 export type EvaluationStatus = 'pending' | 'evaluated';
 
+export type ErrorType =
+  | 'Grammar'
+  | 'Vocabulary'
+  | 'Spelling'
+  | 'Punctuation'
+  | 'Sentence Structure'
+  | 'Cohesion'
+  | 'Repetition'
+  | 'Word Choice'
+  | 'Task Response';
+
+export type ErrorSeverity = 'critical' | 'major' | 'minor';
+
+export interface WritingError {
+  id: string;
+  original: string;
+  error_type: ErrorType;
+  explanation: string;
+  correction: string;
+  severity: ErrorSeverity;
+  criterion: string;
+  start: number;
+  end: number;
+  sentence?: string;
+}
+
 export interface CriterionEvaluation {
   band: number;
   label: string;
@@ -135,6 +161,7 @@ export interface WritingEvaluation {
   evaluated_at: string | null;
   evaluation_status: EvaluationStatus;
   is_official: boolean;
+  error_analysis?: WritingError[];
 }
 
 export interface WritingEvaluationSummary {
