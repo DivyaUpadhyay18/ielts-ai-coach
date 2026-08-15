@@ -11,6 +11,7 @@ from app.ai.prompts import (
     IELTS_SPEAKING_ASSESSOR_PROMPT,
     IELTS_WRITING_ERROR_ANALYSIS_PROMPT,
     IELTS_IMPROVEMENT_PLAN_PROMPT,
+    IELTS_BAND_EXAMPLES_PROMPT,
 )
 
 logger = logging.getLogger(__name__)
@@ -420,6 +421,106 @@ def _build_improvement_prompt(context: Dict[str, Any]) -> str:
         f"Essay text:\n{context.get('essay_text', '')}\n\n"
         f"Now produce the JSON plan object following your instructions."
     )
+
+
+def _build_band_examples_prompt(context: Dict[str, Any]) -> str:
+    """Build the user message for the band-examples call.
+
+    Uses string replacement (not str.format) because the system prompt
+    contains literal JSON braces that would conflict with formatting.
+    """
+    task_type = context.get("task_type", "task_2")
+    task_label = "Task 1 (Academic report / letter)" if task_type == "task_1" else "Task 2 (Essay)"
+    return (
+        f"The student answered {task_label}.\n"
+        f"Target band: {context.get('target_band', 0.0)}\n"
+        f"Current band: {context.get('current_band', 0.0)}\n"
+        f"Error types detected: {context.get('error_types', 'none')}\n"
+        f"Key weaknesses: {context.get('weaknesses', 'none')}\n"
+        f"Criteria bands: {context.get('criteria_bands', {})}\n"
+        f"Generate sample answer: {context.get('generate_sample', 'false')}\n\n"
+        f"Original essay:\n{context.get('essay_text', '')}\n\n"
+        f"Now produce the JSON object following your instructions."
+    )
+
+
+def _normalize_band_examples(plan: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and shape the AI band-examples response into stable shape."""
+    def _coerce_list(value: Any) -> List[Dict[str, Any]]:
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, dict)]
+
+    return {
+        "key_weaknesses": str(plan.get("key_weaknesses", "") or "")[:500],
+        "improved_sentences": _coerce_list(plan.get("improved_sentences"))[:6],
+        "vocabulary_alternatives": _coerce_list(plan.get("vocabulary_alternatives"))[:6],
+        "paragraph_structure": str(plan.get("paragraph_structure", "") or "")[:1000],
+        "example_introduction": str(plan.get("example_introduction", "") or "")[:500],
+        "example_body_paragraph": str(plan.get("example_body_paragraph", "") or "")[:1000],
+        "example_conclusion": str(plan.get("example_conclusion", "") or "")[:500],
+        "sample_answer": str(plan.get("sample_answer", "") or "")[:5000] if plan.get("sample_answer") else None,
+        "is_sample_answer": bool(plan.get("sample_answer")),
+    }
+
+
+def _fallback_band_examples(context: Dict[str, Any]) -> Dict[str, Any]:
+    """Deterministic band-examples fallback when no AI provider is available."""
+    essay = context.get("essay_text", "") or ""
+    weaknesses = context.get("weaknesses", "none")
+    target = context.get("target_band", 7.0)
+
+    improved_sentences = []
+    sentences = _split_sentences(essay) if essay else []
+    if sentences:
+        first = sentences[0]
+        improved = f"[Improved version of: '{first[:80]}'...] Develop this idea more fully with a clear topic sentence, supporting detail, and a concluding link."
+        improved_sentences.append({
+            "original": first[:400],
+            "improved": improved,
+            "explanation": "A Band 7+ response needs clearer topic sentences and extended ideas.",
+        })
+
+    vocab_alternatives = []
+    if "Vocabulary" in str(weaknesses) or "Repetition" in str(weaknesses):
+        vocab_alternatives.append({
+            "from": "very",
+            "to": "exceedingly / significantly / considerably",
+            "why": "More precise academic alternatives to the vague intensifier 'very'.",
+        })
+
+    paragraph_structure = (
+        "Your paragraphs should each cover one main idea. Start with a clear topic "
+        f"sentence, provide specific examples or evidence, and link back to the thesis. "
+        f"At Band {target:.0f}, vary your paragraph length and ensure each has a clear "
+        "function (introducing, developing, or concluding)."
+    )
+
+    intro = (
+        f"Band {target:.0f} introduction: paraphrase the question and outline your "
+        "position clearly, then preview your main arguments in 2-3 sentences."
+    )
+    body = (
+        f"Band {target:.0f} body paragraph: open with a strong topic sentence, "
+        "develop ONE idea with specific examples and explanation, then link to the "
+        "next point. Each paragraph should be 4-6 sentences."
+    )
+    conclusion = (
+        f"Band {target:.0f} conclusion: briefly restate your position using different "
+        "vocabulary, and summarise your main points without introducing new ideas."
+    )
+
+    return {
+        "key_weaknesses": f"Your main weaknesses are: {weaknesses}. At Band {target:.1f} you need to address these specifically.",
+        "improved_sentences": improved_sentences,
+        "vocabulary_alternatives": vocab_alternatives,
+        "paragraph_structure": paragraph_structure,
+        "example_introduction": intro,
+        "example_body_paragraph": body,
+        "example_conclusion": conclusion,
+        "sample_answer": None,
+        "is_sample_answer": False,
+    }
 
 
 def _round_band(value: float) -> float:
@@ -1001,6 +1102,70 @@ class AIService:
                 logger.warning("AI improvement plan fallback: %s", e)
 
         result = _fallback_improvement_plan(context)
+        result["source"] = "deterministic_fallback"
+        return result
+
+    async def generate_band_examples(
+        self,
+        essay_text: str,
+        evaluation: Dict[str, Any],
+        target_band: float,
+        generate_sample: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Generate band-level improvement examples tailored to the student's
+        actual evaluation.  Falls back to a deterministic example set when
+        no API key is set or the call fails.
+        """
+        criteria_bands = evaluation.get("criteria_bands", {}) or {}
+        error_analysis = evaluation.get("error_analysis") or []
+        error_types = sorted({e.get("error_type", "Grammar") for e in error_analysis})
+        weaknesses = _rank_weaknesses(criteria_bands)
+
+        context = {
+            "task_type": evaluation.get("task_type", "task_2"),
+            "current_band": evaluation.get("overall_band") or 0.0,
+            "target_band": target_band,
+            "error_types": ", ".join(error_types) if error_types else "none",
+            "weaknesses": ", ".join(weaknesses) if weaknesses else "none identified",
+            "criteria_bands": criteria_bands,
+            "generate_sample": "true" if generate_sample else "false",
+            "essay_text": essay_text[:2000],
+        }
+
+        if self.api_key:
+            try:
+                prompt = _build_band_examples_prompt(context)
+                async with AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "gpt-4o-mini",
+                            "messages": [
+                                {"role": "system", "content": IELTS_BAND_EXAMPLES_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ],
+                            "temperature": 0.3,
+                            "response_format": {"type": "json_object"},
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    content = data["choices"][0]["message"]["content"] or ""
+                    content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
+                    parsed = json.loads(content)
+                    if isinstance(parsed, dict):
+                        result = _normalize_band_examples(parsed)
+                        result["source"] = "ai"
+                        return result
+            except Exception as e:
+                logger.warning("AI band examples fallback: %s", e)
+
+        result = _fallback_band_examples(context)
         result["source"] = "deterministic_fallback"
         return result
 

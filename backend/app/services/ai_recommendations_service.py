@@ -28,17 +28,20 @@ upserted).
 """
 import logging
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from app.core.exceptions import NotFoundError
 from app.db.session import DatabaseSession
 from app.repositories.band_estimation_repo import BandEstimationRepository
 from app.repositories.progress_tracking_repo import ProgressTrackingRepository
 from app.repositories.streak_repo import StreakRepository
 from app.repositories.user_repo import UserRepository
-from app.services.diagnostic_roadmap_service import DiagnosticRoadmapService, diagnostic_roadmap_service
-from app.services.prediction_engine import PredictionEngineService, prediction_engine_service
-from app.services.recommendation_engine_service import RecommendationEngineService, recommendation_engine_service
+from app.repositories.writing_analytics_repo import WritingAnalyticsRepository
+from app.services.diagnostic_roadmap_service import (
+    diagnostic_roadmap_service,
+)
+from app.services.recommendation_engine_service import (
+    recommendation_engine_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +80,7 @@ class AiRecommendationsService:
         self.band_estimation_repo = BandEstimationRepository(db)
         self.progress_repo = ProgressTrackingRepository(db)
         self.streak_repo = StreakRepository(db)
+        self.writing_repo = WritingAnalyticsRepository(db)
 
     # ─── Week utilities ─────────────────────────────────────────────────
 
@@ -97,9 +101,9 @@ class AiRecommendationsService:
     def get_recommendations(
         self,
         user_id: str,
-        run_date: Optional[date] = None,
+        run_date: date | None = None,
         force_regenerate: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate the full AI recommendations payload for a user.
 
@@ -263,13 +267,13 @@ class AiRecommendationsService:
 
     @staticmethod
     def _compute_study_order(
-        skill_bands: Dict[str, float],
-        weakest_skills: List[str],
-        strongest_skills: List[str],
+        skill_bands: dict[str, float],
+        weakest_skills: list[str],
+        strongest_skills: list[str],
         current_band: float,
         target_band: float,
-        days_remaining: Optional[int],
-    ) -> List[Dict[str, Any]]:
+        days_remaining: int | None,
+    ) -> list[dict[str, Any]]:
         """
         Determine the order in which to study skills this week.
 
@@ -317,10 +321,10 @@ class AiRecommendationsService:
 
     @staticmethod
     def _compute_revision_priorities(
-        weakest_skills: List[str],
-        skill_bands: Dict[str, float],
-        days_remaining: Optional[int],
-    ) -> List[Dict[str, Any]]:
+        weakest_skills: list[str],
+        skill_bands: dict[str, float],
+        days_remaining: int | None,
+    ) -> list[dict[str, Any]]:
         """
         Prioritize revision topics within weak skills.
 
@@ -383,12 +387,12 @@ class AiRecommendationsService:
 
     @staticmethod
     def _compute_extra_practice(
-        weakest_skills: List[str],
-        strongest_skills: List[str],
-        skill_bands: Dict[str, float],
+        weakest_skills: list[str],
+        strongest_skills: list[str],
+        skill_bands: dict[str, float],
         daily_budget: int,
-        days_remaining: Optional[int],
-    ) -> List[Dict[str, Any]]:
+        days_remaining: int | None,
+    ) -> list[dict[str, Any]]:
         """
         Recommend specific extra practice sessions.
 
@@ -455,12 +459,12 @@ class AiRecommendationsService:
     def _compute_additional_resources(
         self,
         user_id: str,
-        weakest_skills: List[str],
+        weakest_skills: list[str],
         current_band: float,
         target_band: float,
-        days_remaining: Optional[int],
+        days_remaining: int | None,
         daily_budget: int,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Delegate to the existing RecommendationEngineService for resource
         recommendations, but frame them as 'additional resources' here.
@@ -485,7 +489,7 @@ class AiRecommendationsService:
         active_days: int,
         daily_budget: int,
         current_streak: int,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Compute break suggestions based on study load.
 
@@ -559,13 +563,13 @@ class AiRecommendationsService:
     @staticmethod
     def _compute_time_management(
         daily_budget: int,
-        days_remaining: Optional[int],
+        days_remaining: int | None,
         week_tasks: int,
         active_days: int,
         current_band: float,
         target_band: float,
         level: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute time management recommendations.
 
@@ -678,13 +682,13 @@ class AiRecommendationsService:
         tasks_completed: int,
         hours_studied: float,
         consistency: float,
-        days_remaining: Optional[int],
+        days_remaining: int | None,
         estimated_band: float,
-        skill_bands: Dict[str, float],
-        weakest_skills: List[str],
-    ) -> List[str]:
+        skill_bands: dict[str, float],
+        weakest_skills: list[str],
+    ) -> list[str]:
         """Generate deterministic, actionable suggestions."""
-        recs: List[str] = []
+        recs: list[str] = []
 
         band_gap = target_band - current_band
         if band_gap >= 2.0:
@@ -741,8 +745,8 @@ class AiRecommendationsService:
 
     @staticmethod
     def _compute_next_week_focus(
-        skill_bands: Dict[str, float], weakest_skills: List[str]
-    ) -> List[str]:
+        skill_bands: dict[str, float], weakest_skills: list[str]
+    ) -> list[str]:
         """Derive next week's focus skills from the lowest bands."""
         if not skill_bands:
             return ["Maintain balanced practice across all skills."]
@@ -766,7 +770,7 @@ class AiRecommendationsService:
     def _build_summary(
         current_band: float,
         target_band: float,
-        days_remaining: Optional[int],
+        days_remaining: int | None,
         week_minutes: int,
         week_tasks: int,
         active_days: int,
@@ -807,7 +811,7 @@ class AiRecommendationsService:
         return " ".join(parts) + "."
 
     @staticmethod
-    def _build_formulas() -> Dict[str, str]:
+    def _build_formulas() -> dict[str, str]:
         """Document all formulas used."""
         return {
             "study_order": (
@@ -843,7 +847,7 @@ class AiRecommendationsService:
 
     # ─── Safe DB wrappers ──────────────────────────────────────────────
 
-    def _safe_resolve_profile(self, user_id: str) -> Dict[str, Any]:
+    def _safe_resolve_profile(self, user_id: str) -> dict[str, Any]:
         if self.db is None:
             return {}
         try:
@@ -851,7 +855,7 @@ class AiRecommendationsService:
         except Exception:
             return {}
 
-    def _safe_get_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
+    def _safe_get_profile(self, user_id: str) -> dict[str, Any] | None:
         if self.db is None:
             return None
         try:
@@ -860,30 +864,60 @@ class AiRecommendationsService:
             return None
 
     def _safe_get_skill_bands(
-        self, user_id: str, diag_profile: Dict[str, Any]
-    ) -> Dict[str, float]:
-        """Get skill bands from latest band estimation, falling back to diagnostic."""
+        self, user_id: str, diag_profile: dict[str, Any]
+    ) -> dict[str, float]:
+        """Get skill bands from latest band estimation, falling back to diagnostic.
+
+        When a writing evaluation band is available, the 'writing' skill band
+        is overridden with the latest writing evaluation's overall band so that
+        weak-skill detection reflects actual writing performance — not just the
+        diagnostic score.
+        """
+        bands: dict[str, float] = {}
         if self.db is not None:
             try:
                 latest = self.band_estimation_repo.get_latest(user_id)
                 if latest and latest.get("skill_bands"):
-                    return {k: float(v) for k, v in latest["skill_bands"].items()}
+                    bands = {k: float(v) for k, v in latest["skill_bands"].items()}
             except Exception:
                 pass
 
-        # Fallback to diagnostic profile.
-        return {k: float(v) for k, v in diag_profile.get("skill_bands", {}).items()}
+        if not bands:
+            bands = {k: float(v) for k, v in diag_profile.get("skill_bands", {}).items()}
+
+        # Override writing band from the latest writing evaluation if available.
+        writing_band = self._safe_get_latest_writing_band(user_id)
+        if writing_band is not None:
+            bands["writing"] = writing_band
+
+        return bands
+
+    def _safe_get_latest_writing_band(self, user_id: str) -> float | None:
+        """Fetch the user's latest writing evaluation overall band."""
+        if self.db is None:
+            return None
+        try:
+            rows = self.writing_repo.list_evaluations(
+                user_id, task_type=None, limit=1
+            )
+            if rows:
+                b = rows[0].get("overall_band")
+                if b is not None:
+                    return float(b)
+        except Exception:
+            pass
+        return None
 
     def _unsafe_get_skill_bands(
-        self, user_id: str, diag_profile: Dict[str, Any]
-    ) -> Dict[str, float]:
+        self, user_id: str, diag_profile: dict[str, Any]
+    ) -> dict[str, float]:
         """Alias for _safe_get_skill_bands (kept for naming consistency)."""
         return self._safe_get_skill_bands(user_id, diag_profile)
 
     @staticmethod
     def _derive_weak_strong(
-        skill_bands: Dict[str, float], diag_profile: Dict[str, Any]
-    ) -> Tuple[List[str], List[str]]:
+        skill_bands: dict[str, float], diag_profile: dict[str, Any]
+    ) -> tuple[list[str], list[str]]:
         """Derive weakest and strongest skills from skill bands or diagnostic profile."""
         if skill_bands:
             ordered = sorted(skill_bands.items(), key=lambda kv: kv[1])
@@ -894,12 +928,12 @@ class AiRecommendationsService:
             strongest = list(diag_profile.get("strongest_skills", []))[:2]
         return weakest, strongest
 
-    def _safe_get_progress_state(self, user_id: str) -> Dict[str, Any]:
+    def _safe_get_progress_state(self, user_id: str) -> dict[str, Any]:
         if self.db is None:
             return {}
         return self.progress_repo.get_state(user_id)
 
-    def _safe_get_streak_overview(self, user_id: str) -> Dict[str, Any]:
+    def _safe_get_streak_overview(self, user_id: str) -> dict[str, Any]:
         if self.db is None:
             return {}
         try:
@@ -907,7 +941,7 @@ class AiRecommendationsService:
         except Exception:
             return {}
 
-    def _safe_get_cached(self, user_id: str, day: date) -> Optional[Dict[str, Any]]:
+    def _safe_get_cached(self, user_id: str, day: date) -> dict[str, Any] | None:
         if self.db is None:
             return None
         try:
@@ -927,7 +961,7 @@ class AiRecommendationsService:
             pass
         return None
 
-    def _safe_store(self, user_id: str, run_date: date, result: Dict[str, Any]) -> None:
+    def _safe_store(self, user_id: str, run_date: date, result: dict[str, Any]) -> None:
         if self.db is None:
             return
         try:
@@ -959,7 +993,7 @@ class AiRecommendationsService:
             logger.warning("AI recommendation store failed user=%s: %s", user_id, exc)
 
     @staticmethod
-    def _parse_date(value: Any) -> Optional[date]:
+    def _parse_date(value: Any) -> date | None:
         if value is None:
             return None
         if isinstance(value, datetime):

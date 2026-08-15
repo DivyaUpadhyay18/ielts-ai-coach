@@ -130,12 +130,14 @@ class WritingWorkspaceRepository(BaseRepository):
         submission_id: str,
         task_type: str,
         word_count: int = 0,
+        attempt_number: int = 1,
     ) -> Dict[str, Any]:
         """Create a pending evaluation record for a submitted essay."""
         payload = {
             "user_id": user_id,
             "submission_id": submission_id,
             "task_type": task_type or "task_2",
+            "attempt_number": attempt_number,
             "status": "pending",
             "overall_band": None,
             "confidence": None,
@@ -203,3 +205,65 @@ class WritingWorkspaceRepository(BaseRepository):
         if not result.data:
             raise NotFoundError("Writing evaluation record not found")
         return result.data[0]
+
+    # ------------------------------------------------------------------
+    # Improvement plans
+    # ------------------------------------------------------------------
+    def create_improvement_plan(
+        self, user_id: str, data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Insert a new improvement plan (owner-scoped)."""
+        payload = {
+            "user_id": user_id,
+            "evaluation_id": data["evaluation_id"],
+            "submission_id": data["submission_id"],
+            "task_type": data.get("task_type", "task_2"),
+            "current_band": float(data.get("current_band", 0.0)),
+            "target_band": float(data.get("target_band", 0.0)),
+            "band_gap": float(data.get("band_gap", 0.0)),
+            "weaknesses": data.get("weaknesses", []),
+            "current_level_description": data.get("current_level_description", ""),
+            "target_level_description": data.get("target_level_description", ""),
+            "specific_changes": data.get("specific_changes", []),
+            "practice_exercises": data.get("practice_exercises", []),
+            "recommended_resources": data.get("recommended_resources", []),
+            "suggested_mission": data.get("suggested_mission", {}),
+            "plan_json": data.get("plan_json", {}),
+            "is_estimate": data.get("is_estimate", True),
+            "source": data.get("source", "ai"),
+        }
+        query = self.db.table("writing_improvement_plans").insert(payload)
+        result = self.db.execute(query, "create writing improvement plan")
+        if not result.data:
+            raise NotFoundError("Failed to create writing improvement plan")
+        return result.data[0]
+
+    def get_improvement_plan(
+        self, evaluation_id: str, user_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch the improvement plan for an evaluation (owner-scoped)."""
+        query = (
+            self.db.table("writing_improvement_plans")
+            .select("*")
+            .eq("evaluation_id", evaluation_id)
+            .eq("user_id", user_id)
+            .limit(1)
+        )
+        result = self.db.execute(query, "fetch writing improvement plan")
+        if not result.data:
+            return None
+        return result.data[0]
+
+    def list_improvement_plans(
+        self, user_id: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """List a user's improvement plans (most recent first)."""
+        query = (
+            self.db.table("writing_improvement_plans")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        result = self.db.execute(query, "list writing improvement plans")
+        return result.data or []

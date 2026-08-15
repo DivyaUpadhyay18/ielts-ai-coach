@@ -195,6 +195,8 @@ class TestWritingEvaluationEngine:
         eng.db = MagicMock()
         eng.repo = MagicMock()
         eng.ai_service = MagicMock()
+        eng.mission_service = MagicMock()
+        eng.mission_service.sync_after_evaluation = MagicMock(return_value={})
         return eng
 
     def test_get_evaluation_not_found(self, engine):

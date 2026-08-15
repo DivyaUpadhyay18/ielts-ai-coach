@@ -3,7 +3,7 @@ Pydantic schemas for the Writing Workspace API.
 """
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ─── Submission CRUD ──────────────────────────────────────────────────
@@ -148,6 +148,8 @@ class WritingEvaluationResponse(BaseModel):
     evaluation_status: str = "pending"
     is_official: bool = False
     error_analysis: Optional[List[WritingError]] = None
+    mission_sync: Optional[Dict[str, Any]] = None
+    attempt_number: int = 1
 
 
 class WritingEvaluationSummary(BaseModel):
@@ -221,4 +223,51 @@ class WritingImprovementPlanResponse(BaseModel):
 class WritingImprovementPlanListResponse(BaseModel):
     """List of improvement plan summaries."""
     results: List[WritingImprovementPlanResponse]
+    total: int
+
+
+class ImprovedSentence(BaseModel):
+    """A sentence-level improvement example."""
+    original: str
+    improved: str
+    explanation: str
+
+
+class VocabularyAlternative(BaseModel):
+    """A vocabulary alternative suggestion."""
+    from_: str = Field(alias="from")
+    to: str
+    why: str
+
+    model_config = {"populate_by_name": True}
+
+
+class BandExampleResponse(BaseModel):
+    """Full band-level example response returned to the client."""
+    id: str
+    evaluation_id: str
+    submission_id: str
+    task_type: str
+    target_band: float
+    current_band: float
+    focus_areas: List[str] = []
+
+    key_weaknesses: str
+    improved_sentences: List[ImprovedSentence] = []
+    vocabulary_alternatives: List[VocabularyAlternative] = []
+    paragraph_structure: str
+    example_introduction: str
+    example_body_paragraph: str
+    example_conclusion: str
+    sample_answer: Optional[str] = None
+    is_sample_answer: bool = False
+
+    is_estimate: bool = True
+    source: str = "ai"
+    created_at: Optional[str] = None
+
+
+class BandExampleListResponse(BaseModel):
+    """List of band examples."""
+    results: List[BandExampleResponse]
     total: int

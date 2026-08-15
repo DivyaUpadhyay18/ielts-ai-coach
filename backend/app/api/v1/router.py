@@ -40,6 +40,10 @@ from app.api.v1.reflections import router as reflections_router
 from app.api.v1.writing_workspace import router as writing_workspace_router
 from app.api.v1.writing_evaluation import router as writing_evaluation_router
 from app.api.v1.writing_improvement_plan import router as writing_improvement_plan_router
+from app.api.v1.writing_band_examples import router as writing_band_examples_router
+from app.api.v1.writing_analytics import router as writing_analytics_router
+from app.api.v1.writing_reattempts import router as writing_reattempts_router
+from app.api.v1.writing_coach import router as writing_coach_router
 
 router = APIRouter()
 
@@ -84,3 +88,7 @@ router.include_router(mentor_memory_router, prefix="/mentor-memory", tags=["AI M
 router.include_router(writing_workspace_router, prefix="/writing-workspace", tags=["Writing Workspace"])
 router.include_router(writing_evaluation_router, prefix="/writing-evaluations", tags=["Writing Evaluations"])
 router.include_router(writing_improvement_plan_router, prefix="/writing-improvement-plans", tags=["Writing Improvement Plans"])
+router.include_router(writing_band_examples_router, prefix="/writing-band-examples", tags=["Writing Band Examples"])
+router.include_router(writing_analytics_router, prefix="/writing-analytics", tags=["Writing Analytics"])
+router.include_router(writing_reattempts_router, prefix="/writing-reattempts", tags=["Writing Reattempts"])
+router.include_router(writing_coach_router, prefix="/writing-coach", tags=["Writing Coach"])

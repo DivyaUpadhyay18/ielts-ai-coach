@@ -12,22 +12,27 @@ import {
    AlertTriangle,
    CheckCircle2,
    X,
-   BookOpen,
-   Clock,
-   Target,
-   RefreshCw,
-   Loader2,
+    BookOpen,
+    Clock,
+    Target,
+    RefreshCw,
+    Loader2,
+    MessageCircle,
    TrendingUp,
    ExternalLink,
+   Trophy,
+   Award,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
+import { WritingReattemptModal } from "@/components/writing/writing-reattempt-modal";
+import { WritingCoach } from "@/components/writing/writing-coach";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Modal, ModalHeader, ModalTitle, ModalFooter } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
-import { writingWorkspaceService, writingEvaluationService, writingImprovementPlanService } from "@/services/api";
+import { writingWorkspaceService, writingEvaluationService, writingImprovementPlanService, writingBandExamplesService, writingReattemptService } from "@/services/api";
 import type {
   WritingWorkspacePrompt,
   WritingWorkspaceSubmission,
@@ -35,6 +40,7 @@ import type {
   WritingEvaluation,
   WritingError,
   WritingImprovementPlan,
+  BandExample,
 } from "@/types/writing-workspace";
 import {
   WRITING_WORKSPACE_TASK_LABELS,
@@ -94,6 +100,11 @@ export default function WritingWorkspacePage() {
   const [improvementPlan, setImprovementPlan] = useState<WritingImprovementPlan | null>(null);
   const [isPlanLoading, setIsPlanLoading] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [bandExample, setBandExample] = useState<BandExample | null>(null);
+  const [isExampleLoading, setIsExampleLoading] = useState(false);
+  const [showExampleModal, setShowExampleModal] = useState(false);
+  const [showReattemptModal, setShowReattemptModal] = useState(false);
+  const [showCoachModal, setShowCoachModal] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load prompts
@@ -217,12 +228,31 @@ export default function WritingWorkspacePage() {
         submission.id,
         targetBand
       );
-      setImprovementPlan(plan);
+       setImprovementPlan(plan);
       setShowPlanModal(true);
     } catch (err: any) {
       setError(err?.message || "Failed to generate improvement plan");
     } finally {
       setIsPlanLoading(false);
+    }
+  };
+
+  const handleGenerateExamples = async (targetBand: number = 7.5, generateSample: boolean = false) => {
+    if (!submission) return;
+    setIsExampleLoading(true);
+    setError(null);
+    try {
+      const result = await writingBandExamplesService.generateExamples(
+        submission.id,
+        targetBand,
+        generateSample,
+      );
+      setBandExample(result);
+      setShowExampleModal(true);
+    } catch (err: any) {
+      setError(err?.message || "Failed to generate examples");
+    } finally {
+      setIsExampleLoading(false);
     }
   };
 
@@ -468,20 +498,69 @@ export default function WritingWorkspacePage() {
                 Your submission has warnings that will be noted in evaluation.
               </div>
             )}
-            {evaluation?.evaluation_status === "evaluated" && evaluation.overall_band !== null && (
-              <div className="mt-3 p-3 rounded-lg bg-green-50/30 border border-green-200/30">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Overall Band</span>
-                  <span className="text-2xl font-bold text-green-700 dark:text-green-300">
-                    {evaluation.overall_band.toFixed(1)}
-                  </span>
+              {evaluation?.evaluation_status === "evaluated" && evaluation.overall_band !== null && (
+                <div className="mt-3 p-3 rounded-lg bg-green-50/30 border border-green-200/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Overall Band</span>
+                    <span className="text-2xl font-bold text-green-700 dark:text-green-300">
+                      {evaluation.overall_band.toFixed(1)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Confidence: {(evaluation.confidence || 0).toFixed(2)}
+                    {" · "} AI estimate (not official IELTS)
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Confidence: {(evaluation.confidence || 0).toFixed(2)}
-                  {" · "} AI estimate (not official IELTS)
-                </p>
-              </div>
-            )}
+              )}
+              {evaluation?.mission_sync && (
+                <div className="mt-3 p-3 rounded-lg bg-blue-50/30 border border-blue-200/30 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium">Mission Complete</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-xs text-muted-foreground">XP Earned</span>
+                      <p className="font-bold text-blue-700 dark:text-blue-300">
+                        +{(evaluation.mission_sync.xp_earned || 0)} XP
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Streak Bonus</span>
+                      <p className="font-bold text-blue-700 dark:text-blue-300">
+                        +(evaluation.mission_sync.streak_bonus || 0)
+                      </p>
+                    </div>
+                    {evaluation.mission_sync.predicted_band != null && (
+                      <div>
+                        <span className="text-xs text-muted-foreground">Predicted Band</span>
+                        <p className="font-bold text-blue-700 dark:text-blue-300">
+                          {evaluation.mission_sync.predicted_band.toFixed(1)}
+                        </p>
+                      </div>
+                    )}
+                    {evaluation.mission_sync.readiness_score != null && (
+                      <div>
+                        <span className="text-xs text-muted-foreground">Readiness Score</span>
+                        <p className="font-bold text-blue-700 dark:text-blue-300">
+                          {(evaluation.mission_sync.readiness_score || 0).toFixed(1)}/100
+                        </p>
+                      </div>
+                    )}
+                    {evaluation.mission_sync.weakest_skill && (
+                      <div className="col-span-2">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Award className="h-3 w-3" />
+                          Weakest Area
+                        </span>
+                        <p className="font-medium text-blue-700 dark:text-blue-300 mt-1">
+                          {evaluation.mission_sync.weakest_skill}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
              <Button
                size="sm"
                onClick={handleEvaluate}
@@ -502,6 +581,24 @@ export default function WritingWorkspacePage() {
              </Button>
               {evaluation?.overall_band != null && (
                 <div className="mt-3 pt-3 border-t border-border space-y-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowReattemptModal(true)}
+                    className="w-full"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retake Challenge
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowCoachModal(true)}
+                    className="w-full"
+                  >
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    Ask Writing Coach
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -546,6 +643,36 @@ export default function WritingWorkspacePage() {
           <ImproveMyBandModal
             plan={improvementPlan}
             onClose={() => setShowPlanModal(false)}
+            onViewExamples={() => {
+              setShowPlanModal(false);
+              void handleGenerateExamples(improvementPlan.target_band);
+            }}
+          />
+        )}
+
+        {/* Band Examples Modal */}
+        {showExampleModal && bandExample && (
+          <BandExamplesModal
+            example={bandExample}
+            onClose={() => setShowExampleModal(false)}
+          />
+        )}
+
+        {/* Writing Retrial Modal */}
+        {showReattemptModal && evaluation && (
+          <WritingReattemptModal
+            submissionId={submission!.id}
+            evaluation={evaluation}
+            onClose={() => setShowReattemptModal(false)}
+          />
+        )}
+
+        {/* Writing Coach Modal */}
+        {showCoachModal && evaluation && (
+          <WritingCoach
+            submissionId={submission!.id}
+            evaluation={evaluation}
+            onClose={() => setShowCoachModal(false)}
           />
         )}
       </div>
@@ -1329,9 +1456,11 @@ function EvaluationDetailModal({
 function ImproveMyBandModal({
   plan,
   onClose,
+  onViewExamples,
 }: {
   plan: WritingImprovementPlan;
   onClose: () => void;
+  onViewExamples: () => void;
 }) {
   const PRIORITY_COLOR: Record<string, string> = {
     high: "bg-red-500/15 text-red-600 dark:text-red-300 border-red-400/50",
@@ -1503,6 +1632,211 @@ function ImproveMyBandModal({
         {plan.is_estimate && (
           <p className="text-xs text-muted-foreground text-center">
             This plan is an AI estimate based on your evaluation — not official IELTS advice.
+          </p>
+        )}
+        <div className="pt-2 border-t border-border">
+          <Button
+            size="sm"
+            variant="default"
+            className="w-full"
+            onClick={onViewExamples}
+          >
+            <BookOpen className="h-4 w-4 mr-2" />
+             View Band-Level Examples
+            </Button>
+          </div>
+        </div>
+
+        <ModalFooter>
+          <Button size="sm" variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </ModalFooter>
+      </Modal>
+  );
+}
+
+
+// ─── Band Examples Modal ─────────────────────────────────────────────
+function BandExamplesModal({
+  example,
+  onClose,
+}: {
+  example: BandExample;
+  onClose: () => void;
+}) {
+  return (
+    <Modal isOpen={true} onClose={onClose} className="max-w-4xl">
+      <ModalHeader>
+        <ModalTitle className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-primary" />
+          Band-Level Improvement Examples
+        </ModalTitle>
+      </ModalHeader>
+
+      <div className="max-h-[70vh] overflow-y-auto py-4 space-y-6">
+        {/* Band context */}
+        <div className="grid grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <span className="text-xs text-muted-foreground">Current Band</span>
+              <p className="text-2xl font-bold text-primary">{example.current_band.toFixed(1)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <span className="text-xs text-muted-foreground">Example Band</span>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{example.target_band.toFixed(1)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <span className="text-xs text-muted-foreground">Focus Areas</span>
+              <p className="text-sm font-medium mt-1">{example.focus_areas.join(", ") || "General improvement"}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Key weaknesses */}
+        {example.key_weaknesses && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Key Weaknesses</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">{example.key_weaknesses}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Improved sentences — side by side: My Sentence vs Improved */}
+        {example.improved_sentences.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Improved Sentences</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {example.improved_sentences.map((s, i) => (
+                <div key={`sent-${i}`} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-xs font-medium text-red-600">My Sentence:</span>
+                    <blockquote className="mt-1 text-sm italic border-l-2 border-red-400/50 pl-3">
+                      {s.original}
+                    </blockquote>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-green-600">Improved:</span>
+                    <blockquote className="mt-1 text-sm italic border-l-2 border-green-400/50 pl-3">
+                      {s.improved}
+                    </blockquote>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-xs text-muted-foreground">{s.explanation}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Vocabulary alternatives */}
+        {example.vocabulary_alternatives.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Better Vocabulary Alternatives</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {example.vocabulary_alternatives.map((v, i) => (
+                <div key={`vocab-${i}`} className="flex items-start gap-3">
+                  <Badge variant="outline" className="mt-0.5 text-xs">
+                    {v.from}
+                  </Badge>
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">→</span>{" "}
+                    <span className="font-medium">{v.to}</span>
+                    <p className="text-xs text-muted-foreground mt-1">{v.why}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Paragraph structure */}
+        {example.paragraph_structure && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Paragraph Structure Guidance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {example.paragraph_structure}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Example paragraphs — side by side: Structure vs Example */}
+        {(example.example_introduction ||
+          example.example_body_paragraph ||
+          example.example_conclusion) && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Example Paragraphs</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {example.example_introduction && (
+                <div>
+                  <span className="text-xs font-medium text-blue-600">Example Introduction</span>
+                  <blockquote className="mt-1 text-sm border-l-2 border-blue-400/50 pl-3 italic">
+                    {example.example_introduction}
+                  </blockquote>
+                </div>
+              )}
+              {example.example_body_paragraph && (
+                <div>
+                  <span className="text-xs font-medium text-amber-600">Example Body Paragraph</span>
+                  <blockquote className="mt-1 text-sm border-l-2 border-amber-400/50 pl-3 italic">
+                    {example.example_body_paragraph}
+                  </blockquote>
+                </div>
+              )}
+              {example.example_conclusion && (
+                <div>
+                  <span className="text-xs font-medium text-green-600">Example Conclusion</span>
+                  <blockquote className="mt-1 text-sm border-l-2 border-green-400/50 pl-3 italic">
+                    {example.example_conclusion}
+                  </blockquote>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Sample answer — clearly labeled as AI-generated */}
+        {example.sample_answer && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                AI-Generated Complete Sample Answer
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <blockquote className="text-sm border-l-2 border-primary/50 pl-3 italic whitespace-pre-wrap">
+                {example.sample_answer}
+              </blockquote>
+              <p className="text-xs text-muted-foreground mt-2">
+                AI-generated example — this is NOT an official IELTS answer. Use it for
+                learning purposes only.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {example.is_estimate && (
+          <p className="text-xs text-muted-foreground text-center">
+            These are AI-generated examples based on your evaluation — not official IELTS advice.
           </p>
         )}
       </div>

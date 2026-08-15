@@ -162,6 +162,16 @@ export interface WritingEvaluation {
   evaluation_status: EvaluationStatus;
   is_official: boolean;
   error_analysis?: WritingError[];
+  mission_sync?: WritingMissionSync | null;
+}
+
+export interface WritingMissionSync {
+  xp_earned: number;
+  mission_completed: boolean;
+  streak_bonus: number;
+  predicted_band?: number | null;
+  readiness_score?: number | null;
+  weakest_skill?: string | null;
 }
 
 export interface WritingEvaluationSummary {
@@ -242,4 +252,189 @@ export interface WritingImprovementPlan {
 export interface WritingImprovementPlanListResponse {
   results: WritingImprovementPlan[];
   total: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Writing Band Examples types ("Improve My Band — Examples")
+// ─────────────────────────────────────────────────────────────
+
+export interface ImprovedSentence {
+  original: string;
+  improved: string;
+  explanation: string;
+}
+
+export interface VocabularyAlternative {
+  from: string;
+  to: string;
+  why: string;
+}
+
+export interface BandExample {
+  id: string;
+  evaluation_id: string;
+  submission_id: string;
+  task_type: WritingTaskType;
+  target_band: number;
+  current_band: number;
+  focus_areas: string[];
+  key_weaknesses: string;
+  improved_sentences: ImprovedSentence[];
+  vocabulary_alternatives: VocabularyAlternative[];
+  paragraph_structure: string;
+  example_introduction: string;
+  example_body_paragraph: string;
+  example_conclusion: string;
+  sample_answer: string | null;
+  is_sample_answer: boolean;
+  is_estimate: boolean;
+  source: string;
+  created_at: string | null;
+}
+
+export interface BandExampleListResponse {
+  results: BandExample[];
+  total: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Writing Reattempt Mode types
+// ─────────────────────────────────────────────────────────────
+
+export interface WritingAttempt {
+  submission_id: string;
+  attempt_number: number;
+  overall_band: number | null;
+  evaluated_at: string | null;
+  bonus_xp: number;
+}
+
+export interface WritingAttemptGroup {
+  attempt_group: string;
+  title: string;
+  task_type: WritingTaskType;
+  attempts: WritingAttempt[];
+  total_attempts: number;
+}
+
+export interface WritingAttemptListResponse {
+  results: WritingAttemptGroup[];
+  total: number;
+}
+
+export interface CriterionComparison {
+  criterion: string;
+  label: string;
+  attempt_1_band: number;
+  attempt_2_band: number;
+  delta: number;
+  improved: boolean;
+}
+
+export interface BandComparison {
+  attempt_1: number;
+  attempt_2: number;
+  delta: number;
+  improved: boolean;
+}
+
+export interface WordCountComparison {
+  attempt_1: number;
+  attempt_2: number;
+  delta: number;
+}
+
+export interface TimeComparison {
+  attempt_1: number;
+  attempt_2: number;
+  delta: number;
+}
+
+export interface WritingComparison {
+  compared: boolean;
+  reason?: string;
+  original_submission_id: string;
+  new_submission_id: string;
+  overall_band: BandComparison;
+  criteria: CriterionComparison[];
+  word_count: WordCountComparison;
+  time_seconds: TimeComparison;
+  improvement: boolean;
+}
+
+export interface WritingReattemptEvaluateResponse {
+  evaluation: WritingEvaluation;
+  comparison: WritingComparison;
+  attempt_number: number;
+  bonus_xp: number;
+  bonus_reason: string | null;
+}
+
+export interface WritingReattemptStartResponse {
+  submission: WritingWorkspaceSubmission;
+  original_submission_id: string;
+  attempt_number: number;
+  attempt_group: string;
+  original_evaluation: WritingEvaluation;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Writing Coach Q&A types
+// ─────────────────────────────────────────────────────────────
+
+export interface WritingCoachMessage {
+  id: string;
+  conversation_id: string;
+  role: "user" | "coach";
+  content: string;
+  structured: WritingCoachMessageStructured;
+  created_at: string | null;
+}
+
+export interface WritingCoachMessageStructured {
+  focus?: string;
+  referenced_text?: string[];
+  referenced_feedback?: string[];
+  essay_text?: string;
+  evaluation_id?: string;
+  [key: string]: unknown;
+}
+
+export interface WritingCoachAnswer {
+  conversation_id: string;
+  answer: string;
+  focus: string;
+  referenced_text: string[];
+  referenced_feedback: string[];
+}
+
+export interface WritingCoachConversation {
+  id: string;
+  user_id: string;
+  evaluation_id: string;
+  submission_id: string;
+  title: string;
+  status: "active" | "archived";
+  messages: WritingCoachMessage[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface WritingCoachConversationListItem {
+  id: string;
+  evaluation_id: string;
+  submission_id: string;
+  title: string;
+  status: "active" | "archived";
+  message_count: number;
+  last_message_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface WritingCoachConversationListResponse {
+  items: WritingCoachConversationListItem[];
+  total: number;
+  limit: number;
+  offset: number;
 }

@@ -20,16 +20,18 @@ Data sources (all from existing repositories):
   - Progress tracking (study minutes, streak, mock test scores)
 """
 import logging
-from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import date, datetime
+from typing import Any
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.db.session import DatabaseSession
 from app.repositories.daily_plan_repo import DailyPlanRepository
+from app.repositories.progress_tracking_repo import ProgressTrackingRepository
 from app.repositories.study_plan_repo import StudyPlanRepository
 from app.repositories.task_repo import TaskRepository
 from app.repositories.user_repo import UserRepository
-from app.repositories.progress_tracking_repo import ProgressTrackingRepository
+from app.repositories.writing_analytics_repo import WritingAnalyticsRepository
+from app.services.diagnostic_roadmap_service import diagnostic_roadmap_service
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,10 @@ W_STREAK = 0.10
 # Mock test blending: 70% mock-based, 30% completion-based.
 MOCK_BLEND = 0.70
 
+# Writing evaluation blending: 60% writing-eval-based, 40% completion-based.
+# (Lower than mock blend because a single essay is a less reliable signal.)
+WRITING_BLEND = 0.60
+
 # Streak factor: cap at 30 days for full score.
 STREAK_CAP = 30
 
@@ -77,11 +83,12 @@ class PredictionEngineService:
         self.daily_plan_repo = DailyPlanRepository(db)
         self.task_repo = TaskRepository(db)
         self.progress_repo = ProgressTrackingRepository(db)
+        self.writing_repo = WritingAnalyticsRepository(db)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def get_prediction(self, user_id: str, run_date: Optional[date] = None) -> Dict[str, Any]:
+    def get_prediction(self, user_id: str, run_date: date | None = None) -> dict[str, Any]:
         """
         Compute the full prediction payload for a user.
 
@@ -135,6 +142,13 @@ class PredictionEngineService:
             round(sum(mock_scores) / len(mock_scores), 1) if mock_scores else None
         )
 
+        # Writing evaluation bands (from writing_evaluations table).
+        writing_bands = self._safe_get_writing_bands(user_id)
+        latest_writing_band = writing_bands[-1] if writing_bands else None
+        average_writing_band = (
+            round(sum(writing_bands) / len(writing_bands), 1) if writing_bands else None
+        )
+
         # Missed days
         missed_days = self._safe_count_missed_days(user_id, today)
 
@@ -151,11 +165,16 @@ class PredictionEngineService:
         preparation_percentage = round(completion_rate, 1)
 
         # 2. Estimated Band
-        current_band = float(user.get("current_band") or 5.0)
-        target_band = float(user.get("target_band") or 7.0)
+        # Diagnostic-first band signals (measured performance > manual assumptions).
+        diag = diagnostic_roadmap_service.resolve_profile(user_id)
+        current_band = float(diag.get("current_band") or user.get("current_band") or 5.0)
+        target_band = float(diag.get("target_band") or user.get("target_band") or current_band + 1.0)
+        if target_band < current_band:
+            target_band = min(9.0, current_band + 1.0)
         estimated_band = self._compute_estimated_band(
             current_band, target_band, completion_rate,
             latest_mock_band, average_mock_band, mock_test_count,
+            latest_writing_band, average_writing_band, writing_bands,
         )
 
         # 3. Study Consistency (already computed)
@@ -182,6 +201,7 @@ class PredictionEngineService:
             risk_level, completion_rate, days_remaining,
             study_consistency, missed_days, daily_streak,
             estimated_band, target_band,
+            latest_writing_band,
         )
 
         # ---- Assemble response -----------------------------------------
@@ -198,10 +218,13 @@ class PredictionEngineService:
             "active_days": active_days,
             "total_days_since_start": total_days_since_start,
             "study_consistency": round(study_consistency, 1),
-            "mock_test_count": mock_test_count,
-            "latest_mock_band": latest_mock_band,
-            "average_mock_band": average_mock_band,
-            "days_remaining": days_remaining,
+             "mock_test_count": mock_test_count,
+             "latest_mock_band": latest_mock_band,
+             "average_mock_band": average_mock_band,
+             "writing_evaluation_count": len(writing_bands),
+             "latest_writing_band": latest_writing_band,
+             "average_writing_band": average_writing_band,
+             "days_remaining": days_remaining,
         }
 
         result = {
@@ -228,7 +251,7 @@ class PredictionEngineService:
 
         return result
 
-    def get_history(self, user_id: str, limit: int = 20, offset: int = 0) -> Dict[str, Any]:
+    def get_history(self, user_id: str, limit: int = 20, offset: int = 0) -> dict[str, Any]:
         """Return paginated prediction history for a user."""
         if self.db is None:
             return {"items": [], "total": 0, "limit": limit, "offset": offset}
@@ -284,18 +307,25 @@ class PredictionEngineService:
         current_band: float,
         target_band: float,
         completion_rate: float,
-        latest_mock_band: Optional[float],
-        average_mock_band: Optional[float],
+        latest_mock_band: float | None,
+        average_mock_band: float | None,
         mock_test_count: int,
+        latest_writing_band: float | None = None,
+        average_writing_band: float | None = None,
+        writing_bands: list[float] | None = None,
     ) -> float:
         """
-        Estimate the user's likely band score.
+        Estimate the user's band score.
 
         Formula:
           If mock tests exist:
             mock_based = average_mock_band (or latest if only one)
             completion_based = current_band + (target_band - current_band) * (completion_rate / 100)
             estimated = MOCK_BLEND * mock_based + (1 - MOCK_BLEND) * completion_based
+          Else if writing evaluations exist:
+            writing_based = average_writing_band (or latest if only one)
+            completion_based = current_band + (target_band - current_band) * (completion_rate / 100)
+            estimated = WRITING_BLEND * writing_based + (1 - WRITING_BLEND) * completion_based
           Else:
             estimated = current_band + (target_band - current_band) * (completion_rate / 100)
 
@@ -308,6 +338,9 @@ class PredictionEngineService:
         if mock_test_count > 0 and average_mock_band is not None:
             mock_based = average_mock_band
             estimated = MOCK_BLEND * mock_based + (1 - MOCK_BLEND) * completion_based
+        elif average_writing_band is not None and (writing_bands or [None])[0] is not None:
+            writing_based = average_writing_band
+            estimated = WRITING_BLEND * writing_based + (1 - WRITING_BLEND) * completion_based
         else:
             estimated = completion_based
 
@@ -378,10 +411,10 @@ class PredictionEngineService:
     @staticmethod
     def _compute_consistency(
         user_id: str,
-        plan_start: Optional[date],
+        plan_start: date | None,
         today: date,
-        active_dates: Optional[set] = None,
-    ) -> Tuple[int, int, float]:
+        active_dates: set | None = None,
+    ) -> tuple[int, int, float]:
         """
         Compute study consistency.
 
@@ -420,7 +453,7 @@ class PredictionEngineService:
         return "normal"
 
     @staticmethod
-    def _parse_date(value: Any) -> Optional[date]:
+    def _parse_date(value: Any) -> date | None:
         if value is None:
             return None
         if isinstance(value, datetime):
@@ -442,9 +475,10 @@ class PredictionEngineService:
         daily_streak: int,
         estimated_band: float,
         target_band: float,
-    ) -> List[str]:
+        latest_writing_band: float | None = None,
+    ) -> list[str]:
         """Generate actionable, deterministic recommendations."""
-        recs: List[str] = []
+        recs: list[str] = []
 
         if risk_level == "critical":
             recs.append("Critical: You are at high risk of not reaching your target band. Increase daily study time immediately.")
@@ -474,13 +508,22 @@ class PredictionEngineService:
         if days_remaining < 30:
             recs.append("Less than 30 days remain. Shift to intensive revision and full mock tests.")
 
+        # Writing-specific recommendation.
+        if latest_writing_band is not None and latest_writing_band < target_band:
+            w_gap = round(target_band - latest_writing_band, 1)
+            recs.append(
+                f"Your latest writing evaluation scored band {latest_writing_band}, "
+                f"{w_gap} band(s) below target. Complete more writing tasks and review "
+                f"the per-criterion feedback."
+            )
+
         return recs
 
     # ------------------------------------------------------------------
     # Formula documentation (for transparency)
     # ------------------------------------------------------------------
     @staticmethod
-    def _build_formulas() -> Dict[str, str]:
+    def _build_formulas() -> dict[str, str]:
         """Return human-readable documentation of every formula used."""
         return {
             "preparation_percentage": (
@@ -489,6 +532,7 @@ class PredictionEngineService:
             ),
             "estimated_band": (
                 "If mock tests exist: estimated = 0.7 * avg_mock_band + 0.3 * (current_band + (target_band - current_band) * completion_rate/100). "
+                "Else if writing evaluations exist: estimated = 0.6 * avg_writing_band + 0.4 * (current_band + (target_band - current_band) * completion_rate/100). "
                 "Else: estimated = current_band + (target_band - current_band) * completion_rate/100. "
                 "Rounded to nearest 0.5, clamped to [0, 9]."
             ),
@@ -517,7 +561,7 @@ class PredictionEngineService:
     # ------------------------------------------------------------------
     # Safe DB wrappers
     # ------------------------------------------------------------------
-    def _safe_get_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
+    def _safe_get_profile(self, user_id: str) -> dict[str, Any] | None:
         if self.db is None:
             return None
         try:
@@ -525,26 +569,26 @@ class PredictionEngineService:
         except NotFoundError:
             return None
 
-    def _safe_get_active_plan(self, user_id: str) -> Optional[Dict[str, Any]]:
+    def _safe_get_active_plan(self, user_id: str) -> dict[str, Any] | None:
         if self.db is None:
             return None
         return self.study_plan_repo.get_active(user_id)
 
     def _safe_list_tasks(
-        self, user_id: str, study_plan_id: Optional[str]
-    ) -> List[Dict[str, Any]]:
+        self, user_id: str, study_plan_id: str | None
+    ) -> list[dict[str, Any]]:
         if self.db is None:
             return []
         return self.task_repo.list_for_user(
             user_id=user_id, study_plan_id=study_plan_id
         )
 
-    def _safe_get_progress_state(self, user_id: str) -> Dict[str, Any]:
+    def _safe_get_progress_state(self, user_id: str) -> dict[str, Any]:
         if self.db is None:
             return {}
         return self.progress_repo.get_state(user_id)
 
-    def _safe_get_mock_scores(self, user_id: str) -> List[float]:
+    def _safe_get_mock_scores(self, user_id: str) -> list[float]:
         """
         Extract mock test band scores from the study session ledger.
 
@@ -555,7 +599,7 @@ class PredictionEngineService:
             return []
 
         history = self.progress_repo.get_history(user_id, limit=100)
-        scores: List[float] = []
+        scores: list[float] = []
         for session in history:
             if session.get("session_type") != "mock_test":
                 continue
@@ -567,6 +611,32 @@ class PredictionEngineService:
                 except (ValueError, TypeError):
                     continue
         return scores
+
+    def _safe_get_writing_bands(self, user_id: str) -> list[float]:
+        """
+        Extract writing evaluation overall bands from the writing_evaluations
+        table (newest first). Falls back to mock scores if writing data is
+        unavailable.
+        """
+        if self.db is None:
+            return []
+        try:
+            rows = self.writing_repo.list_evaluations(
+                user_id, task_type=None, limit=50
+            )
+            bands = []
+            for row in rows:
+                b = row.get("overall_band")
+                if b is not None:
+                    bands.append(float(b))
+            # Reverse so newest is last (list_evaluations returns newest first).
+            bands.reverse()
+            return bands
+        except Exception as exc:
+            logger.warning(
+                "writing band fetch failed user=%s: %s", user_id, exc
+            )
+            return []
 
     def _safe_count_missed_days(self, user_id: str, today: date) -> int:
         if self.db is None:
@@ -593,8 +663,8 @@ class PredictionEngineService:
         return active
 
     def _compute_consistency_with_db(
-        self, user_id: str, plan_start: Optional[date], today: date
-    ) -> Tuple[int, int, float]:
+        self, user_id: str, plan_start: date | None, today: date
+    ) -> tuple[int, int, float]:
         """Compute consistency using DB-backed active dates."""
         active_dates = self._safe_get_active_dates(user_id)
         return self._compute_consistency(user_id, plan_start, today, active_dates)
@@ -603,7 +673,7 @@ class PredictionEngineService:
     # History persistence
     # ------------------------------------------------------------------
     def _store_history(
-        self, user_id: str, run_date: date, result: Dict[str, Any]
+        self, user_id: str, run_date: date, result: dict[str, Any]
     ) -> None:
         """Store a prediction snapshot in the prediction_history table."""
         if self.db is None:

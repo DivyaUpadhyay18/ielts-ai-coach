@@ -228,6 +228,11 @@ from app.services.ai_mentor_service import AIMentorService, ai_mentor_service
 from app.services.writing_workspace_service import WritingWorkspaceService
 from app.services.writing_evaluation_engine import WritingEvaluationEngine
 from app.services.writing_improvement_plan_engine import WritingImprovementPlanEngine
+from app.services.writing_band_examples_engine import WritingBandExamplesEngine
+from app.services.writing_analytics_service import WritingAnalyticsService
+from app.services.writing_mission_service import WritingMissionService
+from app.services.writing_attempt_service import WritingAttemptService
+from app.services.writing_coach_service import WritingCoachService
 
 
 # Writing Workspace service factory
@@ -247,6 +252,35 @@ def get_writing_improvement_plan_engine() -> WritingImprovementPlanEngine:
     from app.db.session import db_session
     return WritingImprovementPlanEngine(db_session)
 
+
+# Writing Band Examples Engine factory
+def get_writing_band_examples_engine() -> WritingBandExamplesEngine:
+    from app.db.session import db_session
+    return WritingBandExamplesEngine(db_session)
+
+
+# Writing Analytics service factory
+def get_writing_analytics_service() -> WritingAnalyticsService:
+    from app.db.session import db_session
+    return WritingAnalyticsService(db_session)
+
+
+# Writing Mission service factory
+def get_writing_mission_service() -> WritingMissionService:
+    from app.db.session import db_session
+    return WritingMissionService(db_session)
+
+
+# Writing Attempt service factory
+def get_writing_attempt_service() -> WritingAttemptService:
+    from app.db.session import db_session
+    return WritingAttemptService(db_session)
+
+
+# Writing Coach service factory
+def get_writing_coach_service() -> WritingCoachService:
+    from app.db.session import db_session
+    return WritingCoachService(db_session)
 
 def get_user_repo() -> UserRepository:
     return UserRepository(db_session)

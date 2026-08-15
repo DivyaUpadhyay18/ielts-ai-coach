@@ -1685,6 +1685,8 @@ import type {
   WritingWorkspaceSubmissionListResponse,
   WritingImprovementPlan,
   WritingImprovementPlanListResponse,
+  BandExample,
+  BandExampleListResponse,
 } from '@/types/writing-workspace';
 
 export const writingWorkspaceService = {
@@ -1762,6 +1764,98 @@ export const writingEvaluationService = {
   },
 };
 
+// Writing Reattempt service (mirrors /api/v1/writing-reattempts/*)
+// ─────────────────────────────────────────────────────────────
+import type {
+  WritingAttemptListResponse,
+  WritingReattemptStartResponse,
+  WritingReattemptEvaluateResponse,
+  WritingComparison,
+} from '@/types/writing-workspace';
+
+export const writingReattemptService = {
+  startReattempt: async (
+    submissionId: string,
+  ): Promise<WritingReattemptStartResponse> => {
+    const response = await authApi.post(
+      `/writing-reattempts/${submissionId}/start`
+    );
+    return response.data;
+  },
+
+  evaluateReattempt: async (
+    submissionId: string,
+  ): Promise<WritingReattemptEvaluateResponse> => {
+    const response = await authApi.post(
+      `/writing-reattempts/${submissionId}/evaluate`
+    );
+    return response.data;
+  },
+
+  compareAttempts: async (
+    submissionId: string,
+  ): Promise<WritingComparison> => {
+    const response = await authApi.get(
+      `/writing-reattempts/${submissionId}/compare`
+    );
+    return response.data;
+  },
+
+  listAttempts: async (limit = 20): Promise<WritingAttemptListResponse> => {
+    const response = await authApi.get('/writing-reattempts', {
+      params: { limit },
+    });
+    return response.data;
+  },
+};
+
+// Writing Coach service (mirrors /api/v1/writing-coach/*)
+// ─────────────────────────────────────────────────────────────
+import type {
+  WritingCoachAnswer,
+  WritingCoachConversation,
+  WritingCoachConversationListResponse,
+} from '@/types/writing-workspace';
+
+export const writingCoachService = {
+  ask: async (
+    submissionId: string,
+    question: string,
+  ): Promise<WritingCoachAnswer> => {
+    const response = await authApi.post(
+      `/writing-coach/${submissionId}/ask?question=${encodeURIComponent(question)}`
+    );
+    return response.data;
+  },
+
+  askQuick: async (
+    submissionId: string,
+    question: string,
+  ): Promise<Omit<WritingCoachAnswer, 'conversation_id'>> => {
+    const response = await authApi.post(
+      `/writing-coach/${submissionId}/ask-quick?question=${encodeURIComponent(question)}`
+    );
+    return response.data;
+  },
+
+  getConversation: async (
+    conversationId: string,
+  ): Promise<WritingCoachConversation> => {
+    const response = await authApi.get(`/writing-coach/conversations/${conversationId}`);
+    return response.data;
+  },
+
+  listConversations: async (
+    limit = 50,
+    offset = 0,
+  ): Promise<WritingCoachConversationListResponse> => {
+    const response = await authApi.get('/writing-coach/conversations', {
+      params: { limit, offset },
+    });
+    return response.data;
+  },
+};
+
 // Writing Improvement Plans service (mirrors /api/v1/writing-improvement-plans/*)
 // ─────────────────────────────────────────────────────────────
 export const writingImprovementPlanService = {
@@ -1781,6 +1875,31 @@ export const writingImprovementPlanService = {
 
   listPlans: async (limit = 20): Promise<WritingImprovementPlanListResponse> => {
     const response = await authApi.get('/writing-improvement-plans', { params: { limit } });
+    return response.data;
+  },
+};
+
+// Writing Band Examples service (mirrors /api/v1/writing-band-examples/*)
+// ─────────────────────────────────────────────────────────────
+export const writingBandExamplesService = {
+  generateExamples: async (
+    submissionId: string,
+    targetBand: number = 7.5,
+    generateSample: boolean = false,
+  ): Promise<BandExample> => {
+    const response = await authApi.post(`/writing-band-examples/${submissionId}`, null, {
+      params: { target_band: targetBand, generate_sample: generateSample },
+    });
+    return response.data;
+  },
+
+  getExamples: async (evaluationId: string): Promise<BandExample> => {
+    const response = await authApi.get(`/writing-band-examples/${evaluationId}`);
+    return response.data;
+  },
+
+  listExamples: async (limit = 20): Promise<BandExampleListResponse> => {
+    const response = await authApi.get('/writing-band-examples', { params: { limit } });
     return response.data;
   },
 };

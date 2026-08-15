@@ -28,10 +28,9 @@ Scoring algorithm (documented):
   Each criterion band is in 0.0–9.0 in 0.5 increments.
 """
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from app.core.exceptions import NotFoundError, ValidationError
-from app.core.exceptions import DatabaseError
 from app.db.session import DatabaseSession
 from app.repositories.writing_workspace_repo import WritingWorkspaceRepository
 from app.services.ai_service import (
@@ -40,6 +39,7 @@ from app.services.ai_service import (
     _compute_overall_band,
     _round_band,
 )
+from app.services.writing_mission_service import WritingMissionService
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ class WritingEvaluationEngine:
         self.db = db
         self.repo = WritingWorkspaceRepository(db)
         self.ai_service: AIService = AIService()
+        self.mission_service = WritingMissionService(db)
 
     # ------------------------------------------------------------------
     # Evaluation
@@ -77,7 +78,8 @@ class WritingEvaluationEngine:
         user_id: str,
         submission_id: str,
         task_type: str = "task_2",
-    ) -> Dict[str, Any]:
+        attempt_number: int = 1,
+    ) -> dict[str, Any]:
         """
         Run the full AI evaluation on a submitted essay and store the result.
 
@@ -118,7 +120,7 @@ class WritingEvaluationEngine:
         # Run the detailed per-issue error analysis (backend-only). Never
         # fatal: if it fails we store an empty list rather than failing the
         # whole evaluation.
-        error_analysis: List[Dict[str, Any]] = []
+        error_analysis: list[dict[str, Any]] = []
         try:
             error_result = await self.ai_service.analyze_writing_errors(
                 essay_text=essay_text,
@@ -138,6 +140,7 @@ class WritingEvaluationEngine:
                 submission_id=submission_id,
                 task_type=task_type,
                 word_count=int(submission.get("word_count") or 0),
+                attempt_number=attempt_number,
             )
 
         # Store the complete AI evaluation.
@@ -160,11 +163,24 @@ class WritingEvaluationEngine:
             user_id, submission_id, stored.get("overall_band"),
             stored.get("confidence"),
         )
+
+        # Sync downstream systems: mission progress, XP, streak, prediction.
+        try:
+            sync_result = self.mission_service.sync_after_evaluation(
+                user_id, submission_id, stored
+            )
+            stored["mission_sync"] = sync_result
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "writing mission sync skipped user=%s submission=%s: %s",
+                user_id, submission_id, exc,
+            )
+
         return self._to_response(stored)
 
     def get_evaluation(
         self, user_id: str, submission_id: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Fetch the evaluation for a submission (owner-scoped)."""
         submission = self.repo.get_submission(submission_id, user_id)
         if not submission:
@@ -177,7 +193,7 @@ class WritingEvaluationEngine:
 
     def get_user_evaluations(
         self, user_id: str, limit: int = 20
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """List the current user's evaluation records (most recent first)."""
         rows = self.repo.list_evaluations(user_id, limit)
         results = [
@@ -203,9 +219,9 @@ class WritingEvaluationEngine:
         user_id: str,
         submission_id: str,
         task_type: str,
-        ai_result: Dict[str, Any],
-        error_analysis: List[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        ai_result: dict[str, Any],
+        error_analysis: list[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
         """
         Update an evaluation record with the AI-computed scores.
 
@@ -272,7 +288,7 @@ class WritingEvaluationEngine:
         return self.repo.update_evaluation(evaluation_id, user_id, payload)
 
     @staticmethod
-    def _collect_field(criteria: Dict[str, Any], field: str) -> List[str]:
+    def _collect_field(criteria: dict[str, Any], field: str) -> list[str]:
         """Collect a text field from all criteria into a flat list."""
         return [
             c[field]
@@ -281,7 +297,7 @@ class WritingEvaluationEngine:
         ]
 
     @staticmethod
-    def _collect_list_field(criteria: Dict[str, Any], field: str) -> List[str]:
+    def _collect_list_field(criteria: dict[str, Any], field: str) -> list[str]:
         """Collect a list field from all criteria into a flat list."""
         result = []
         for c in criteria.values():
@@ -293,7 +309,7 @@ class WritingEvaluationEngine:
     # Response projection
     # ------------------------------------------------------------------
     @staticmethod
-    def _to_response(evaluation: Dict[str, Any]) -> Dict[str, Any]:
+    def _to_response(evaluation: dict[str, Any]) -> dict[str, Any]:
         """
         Project a stored evaluation row into the API response shape.
 
@@ -351,4 +367,6 @@ class WritingEvaluationEngine:
         result["overall_band"] = evaluation.get("overall_band")  # may be None
         result["confidence"] = evaluation.get("confidence")  # may be None
         result["evaluated_at"] = evaluation.get("evaluated_at")  # may be None
+        result["mission_sync"] = evaluation.get("mission_sync")  # may be None
+        result["attempt_number"] = int(evaluation.get("attempt_number") or 1)
         return result
