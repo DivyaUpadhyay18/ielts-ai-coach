@@ -14,6 +14,15 @@ class Settings(BaseSettings):
     # AI Settings
     OPENAI_API_KEY: Optional[str] = None
 
+    # Speech-to-Text pipeline (Speaking Audio Processing)
+    # Provider: "openai" (Whisper) | "mock" (deterministic local fallback) | "none"
+    STT_PROVIDER: str = "openai"
+    STT_MODEL: str = "whisper-1"
+    STT_API_BASE: str = "https://api.openai.com"
+    STT_MAX_FILE_SIZE_MB: int = 25          # OpenAI Whisper hard limit
+    STT_ALLOWED_EXTENSIONS: str = "webm,mp3,mp4,mpeg,mpga,m4a,wav,ogg"
+    STT_RETRY_ATTEMPTS: int = 2             # extra attempts after the first try
+
     # CORS Settings
     CORS_ORIGINS: Optional[str] = None
 

@@ -1,49 +1,61 @@
 # API v1 router aggregation
 from fastapi import APIRouter
-from app.api.v1.auth import router as auth_router
-from app.api.v1.onboarding import router as onboarding_router
-from app.api.v1.dashboard import router as dashboard_router
-from app.api.v1.users import router as users_router
-from app.api.v1.study_plans import router as study_plans_router
-from app.api.v1.daily_plans import router as daily_plans_router
-from app.api.v1.daily_missions import router as daily_missions_router
-from app.api.v1.tasks import router as tasks_router
-from app.api.v1.resources import router as resources_router
-from app.api.v1.progress import router as progress_router
+
 from app.api.v1.achievements import router as achievements_router
-from app.api.v1.notifications import router as notifications_router
-from app.api.v1.progress_tracking import router as progress_tracking_router
-from app.api.v1.streaks import router as streaks_router
-from app.api.v1.scheduler import router as scheduler_router
-from app.api.v1.schedule_history import router as schedule_history_router
-from app.api.v1.countdown import router as countdown_router
-from app.api.v1.prediction import router as prediction_router
-from app.api.v1.resource_management import router as resource_management_router
-from app.api.v1.recommendation_engine import router as recommendation_router
-from app.api.v1.learning_session import router as learning_session_router
-from app.api.v1.resource_notes import router as resource_notes_router
-from app.api.v1.analytics import router as analytics_router
-from app.api.v1.resource_quality import router as resource_quality_router
-from app.api.v1.diagnostic import router as diagnostic_router
-from app.api.v1.reading_diagnostic import router as reading_diagnostic_router
-from app.api.v1.listening_diagnostic import router as listening_diagnostic_router
-from app.api.v1.writing_diagnostic import router as writing_diagnostic_router
-from app.api.v1.speaking_diagnostic import router as speaking_diagnostic_router
-from app.api.v1.vocab_grammar_diagnostic import router as vocab_grammar_diagnostic_router
 from app.api.v1.admin import router as admin_router
-from app.api.v1.band_estimation import router as band_estimation_router
-from app.api.v1.mentor import router as mentor_router
-from app.api.v1.weekly_reports import router as weekly_reports_router
 from app.api.v1.ai_recommendations import router as ai_recommendations_router
+from app.api.v1.analytics import router as analytics_router
+from app.api.v1.auth import router as auth_router
+from app.api.v1.band_estimation import router as band_estimation_router
+from app.api.v1.countdown import router as countdown_router
+from app.api.v1.daily_missions import router as daily_missions_router
+from app.api.v1.daily_plans import router as daily_plans_router
+from app.api.v1.dashboard import router as dashboard_router
+from app.api.v1.diagnostic import router as diagnostic_router
+from app.api.v1.learning_session import router as learning_session_router
+from app.api.v1.listening_diagnostic import router as listening_diagnostic_router
+from app.api.v1.mentor import router as mentor_router
 from app.api.v1.mentor_memory import router as mentor_memory_router
+from app.api.v1.notifications import router as notifications_router
+from app.api.v1.onboarding import router as onboarding_router
+from app.api.v1.prediction import router as prediction_router
+from app.api.v1.progress import router as progress_router
+from app.api.v1.progress_tracking import router as progress_tracking_router
+from app.api.v1.reading_diagnostic import router as reading_diagnostic_router
+from app.api.v1.recommendation_engine import router as recommendation_router
 from app.api.v1.reflections import router as reflections_router
-from app.api.v1.writing_workspace import router as writing_workspace_router
-from app.api.v1.writing_evaluation import router as writing_evaluation_router
-from app.api.v1.writing_improvement_plan import router as writing_improvement_plan_router
-from app.api.v1.writing_band_examples import router as writing_band_examples_router
+from app.api.v1.resource_management import router as resource_management_router
+from app.api.v1.resource_notes import router as resource_notes_router
+from app.api.v1.resource_quality import router as resource_quality_router
+from app.api.v1.resources import router as resources_router
+from app.api.v1.schedule_history import router as schedule_history_router
+from app.api.v1.scheduler import router as scheduler_router
+from app.api.v1.speaking_diagnostic import router as speaking_diagnostic_router
+from app.api.v1.speaking_test import router as speaking_test_router
+from app.api.v1.speaking_error_analysis import router as speaking_error_analysis_router
+from app.api.v1.speaking_improvement_plan import router as speaking_improvement_plan_router
+from app.api.v1.speaking_reattempts import router as speaking_reattempts_router
+from app.api.v1.speaking_practice import router as speaking_practice_router
+from app.api.v1.speaking_coach import router as speaking_coach_router
+from app.api.v1.streaks import router as streaks_router
+from app.api.v1.study_plans import router as study_plans_router
+from app.api.v1.tasks import router as tasks_router
+from app.api.v1.users import router as users_router
+from app.api.v1.vocab_grammar_diagnostic import (
+    router as vocab_grammar_diagnostic_router,
+)
+from app.api.v1.weekly_reports import router as weekly_reports_router
 from app.api.v1.writing_analytics import router as writing_analytics_router
-from app.api.v1.writing_reattempts import router as writing_reattempts_router
+from app.api.v1.speaking_analytics import router as speaking_analytics_router
+from app.api.v1.writing_band_examples import router as writing_band_examples_router
 from app.api.v1.writing_coach import router as writing_coach_router
+from app.api.v1.writing_diagnostic import router as writing_diagnostic_router
+from app.api.v1.writing_evaluation import router as writing_evaluation_router
+from app.api.v1.writing_improvement_plan import (
+    router as writing_improvement_plan_router,
+)
+from app.api.v1.writing_reattempts import router as writing_reattempts_router
+from app.api.v1.writing_workspace import router as writing_workspace_router
 
 router = APIRouter()
 
@@ -90,5 +102,12 @@ router.include_router(writing_evaluation_router, prefix="/writing-evaluations", 
 router.include_router(writing_improvement_plan_router, prefix="/writing-improvement-plans", tags=["Writing Improvement Plans"])
 router.include_router(writing_band_examples_router, prefix="/writing-band-examples", tags=["Writing Band Examples"])
 router.include_router(writing_analytics_router, prefix="/writing-analytics", tags=["Writing Analytics"])
+router.include_router(speaking_analytics_router, prefix="/speaking-analytics", tags=["Speaking Analytics"])
 router.include_router(writing_reattempts_router, prefix="/writing-reattempts", tags=["Writing Reattempts"])
 router.include_router(writing_coach_router, prefix="/writing-coach", tags=["Writing Coach"])
+router.include_router(speaking_test_router, prefix="/speaking-test", tags=["Speaking Test Workspace"])
+router.include_router(speaking_error_analysis_router, prefix="/speaking-error-analysis", tags=["Speaking Error Analysis"])
+router.include_router(speaking_improvement_plan_router, prefix="/speaking-improvement-plan", tags=["Speaking Improvement Plan"])
+router.include_router(speaking_reattempts_router, prefix="/speaking-reattempts", tags=["Speaking Reattempts"])
+router.include_router(speaking_practice_router, prefix="/speaking-practice", tags=["Speaking Practice"])
+router.include_router(speaking_coach_router, prefix="/speaking-coach", tags=["Speaking Coach"])

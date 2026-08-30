@@ -1,167 +1,130 @@
 """
 Pydantic schemas for the Resource Management domain.
-
-Tracks resources for the IELTS AI Coach with full CRUD support:
-- Video, PDF, Website, Quiz, Flashcard types
-- Reading, Listening, Writing, Speaking, Vocabulary, Grammar skills
-- Sub-skill specialization, band range, difficulty, ratings
 """
-from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator
+from typing import Any, Dict, List, Optional
 
-
-RESOURCE_TYPES = ("Video", "PDF", "Website", "Quiz", "Flashcard")
-RESOURCE_SKILLS = ("Reading", "Listening", "Writing", "Speaking", "Vocabulary", "Grammar")
-
-READING_SUB_SKILLS = (
-    "True False Not Given",
-    "Matching Headings",
-    "Sentence Completion",
-    "Summary Completion",
-    "Multiple Choice",
-)
-WRITING_SUB_SKILLS = (
-    "Task 1",
-    "Task 2",
-    "Coherence",
-    "Lexical Resource",
-    "Grammar",
-    "Ideas",
-)
-SPEAKING_SUB_SKILLS = (
-    "Fluency",
-    "Pronunciation",
-    "Part 1",
-    "Part 2",
-    "Part 3",
-)
-LISTENING_SUB_SKILLS = (
-    "Map",
-    "Multiple Choice",
-    "Form Completion",
-)
-VOCABULARY_SUB_SKILLS = (
-    "Academic",
-    "Daily",
-    "Idioms",
-)
-GRAMMAR_SUB_SKILLS = (
-    "Tenses",
-    "Articles",
-    "Prepositions",
-)
-
-DIFFICULTY_LEVELS = ("beginner", "intermediate", "advanced", "all_levels")
+from pydantic import BaseModel, Field
 
 
 class ResourceCreate(BaseModel):
     """Schema for creating a new resource."""
     title: str = Field(..., min_length=1, max_length=300)
     description: Optional[str] = None
-    type: str = Field(..., min_length=1)
+    type: str = Field(..., description="Resource type: video, article, pdf, practice_test, guide, flashcard_set")
+    skill: str = Field(..., description="Skill: writing, speaking, reading, listening, vocabulary, grammar, general")
+    module: str = Field("academic", description="Module: academic, general, both")
+    difficulty: str = Field("intermediate", description="Difficulty: beginner, intermediate, advanced, all_levels")
+    provider: Optional[str] = None
+    url: str = Field(..., description="URL starting with https://")
+    duration_minutes: Optional[int] = Field(None, ge=1, le=600)
+    tags: List[str] = Field(default_factory=list)
+    is_published: bool = True
+    source: Optional[str] = None
+    author: Optional[str] = None
+    thumbnail: Optional[str] = None
+    sub_skill: Optional[str] = None
+    minimum_band: Optional[float] = Field(None, ge=0.0, le=9.0)
+    maximum_band: Optional[float] = Field(None, ge=0.0, le=9.0)
+    estimated_time: Optional[int] = Field(None, ge=0)
+    language: str = "en"
+    verified: bool = False
+    official: bool = False
+    is_free: bool = True
+    rating: Optional[float] = Field(None, ge=0.0, le=5.0)
+    popularity_score: int = 0
+
+
+class ResourceUpdate(BaseModel):
+    """Schema for updating a resource."""
+    title: Optional[str] = Field(None, min_length=1, max_length=300)
+    description: Optional[str] = None
+    type: Optional[str] = None
+    skill: Optional[str] = None
+    module: Optional[str] = None
+    difficulty: Optional[str] = None
+    provider: Optional[str] = None
+    url: Optional[str] = None
+    duration_minutes: Optional[int] = Field(None, ge=1, le=600)
+    tags: Optional[List[str]] = None
+    is_published: Optional[bool] = None
+    source: Optional[str] = None
+    author: Optional[str] = None
+    thumbnail: Optional[str] = None
+    sub_skill: Optional[str] = None
+    minimum_band: Optional[float] = Field(None, ge=0.0, le=9.0)
+    maximum_band: Optional[float] = Field(None, ge=0.0, le=9.0)
+    estimated_time: Optional[int] = Field(None, ge=0)
+    language: Optional[str] = None
+    verified: Optional[bool] = None
+    official: Optional[bool] = None
+    is_free: Optional[bool] = None
+    rating: Optional[float] = Field(None, ge=0.0, le=5.0)
+    popularity_score: Optional[int] = None
+
+
+class ResourceResponse(BaseModel):
+    """Schema for resource response."""
+    id: str
+    title: str
+    description: Optional[str]
+    type: str
+    skill: str
+    module: str
+    difficulty: str
+    provider: Optional[str]
+    url: str
+    duration_minutes: Optional[int]
+    tags: List[str]
+    is_published: bool
+    view_count: int
+    created_at: Optional[str]
+    updated_at: Optional[str]
+    source: Optional[str]
+    author: Optional[str]
+    thumbnail: Optional[str]
+    sub_skill: Optional[str]
+    minimum_band: Optional[float]
+    maximum_band: Optional[float]
+    estimated_time: Optional[int]
+    language: str
+    verified: bool
+    official: bool
+    is_free: bool
+    rating: Optional[float]
+    popularity_score: int
+
+
+class ResourceSuggestionCreate(BaseModel):
+    """Schema for creating a resource suggestion (community submission)."""
+    title: str = Field(..., min_length=1, max_length=300)
+    description: Optional[str] = None
+    category: str = Field(
+        "Website",
+        description="Category: YouTube Video, PDF, Website, Practice Test, Vocabulary List",
+    )
+    reason: Optional[str] = Field(None, description="Why this resource is valuable")
+    type: str = Field(..., description="Video, PDF, Website, Quiz, Flashcard")
     source: Optional[str] = None
     author: Optional[str] = None
     url: Optional[str] = None
     thumbnail: Optional[str] = None
-    skill: str = Field(..., min_length=1)
+    skill: str = Field(..., description="Reading, Listening, Writing, Speaking, Vocabulary, Grammar")
     sub_skill: Optional[str] = None
     minimum_band: Optional[float] = Field(None, ge=0.0, le=9.0)
     maximum_band: Optional[float] = Field(None, ge=0.0, le=9.0)
-    difficulty: Optional[str] = None
+    difficulty: Optional[str] = Field(None, description="beginner, intermediate, advanced, all_levels")
     estimated_time: Optional[int] = Field(None, ge=0)
     tags: List[str] = Field(default_factory=list)
-    language: str = Field(default="en")
-    verified: bool = Field(default=False)
-    official: bool = Field(default=False)
-    is_free: bool = Field(default=True)
-    rating: Optional[float] = Field(None, ge=0.0, le=5.0)
-    popularity_score: int = Field(default=0, ge=0)
-
-    @field_validator("title")
-    @classmethod
-    def strip_title(cls, v: str) -> str:
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError("Title cannot be empty")
-        return stripped
-
-    @field_validator("type")
-    @classmethod
-    def validate_type(cls, v: str) -> str:
-        if v not in RESOURCE_TYPES:
-            raise ValueError(f"type must be one of: {', '.join(RESOURCE_TYPES)}")
-        return v
-
-    @field_validator("skill")
-    @classmethod
-    def validate_skill(cls, v: str) -> str:
-        if v not in RESOURCE_SKILLS:
-            raise ValueError(f"skill must be one of: {', '.join(RESOURCE_SKILLS)}")
-        return v
-
-    @field_validator("sub_skill")
-    @classmethod
-    def validate_sub_skill(cls, v: Optional[str], info) -> Optional[str]:
-        if v is None:
-            return v
-        skill = info.data.get("skill")
-        if skill == "Reading" and v not in READING_SUB_SKILLS:
-            raise ValueError(f"sub_skill for Reading must be one of: {', '.join(READING_SUB_SKILLS)}")
-        if skill == "Writing" and v not in WRITING_SUB_SKILLS:
-            raise ValueError(f"sub_skill for Writing must be one of: {', '.join(WRITING_SUB_SKILLS)}")
-        if skill == "Speaking" and v not in SPEAKING_SUB_SKILLS:
-            raise ValueError(f"sub_skill for Speaking must be one of: {', '.join(SPEAKING_SUB_SKILLS)}")
-        if skill == "Listening" and v not in LISTENING_SUB_SKILLS:
-            raise ValueError(f"sub_skill for Listening must be one of: {', '.join(LISTENING_SUB_SKILLS)}")
-        if skill == "Vocabulary" and v not in VOCABULARY_SUB_SKILLS:
-            raise ValueError(f"sub_skill for Vocabulary must be one of: {', '.join(VOCABULARY_SUB_SKILLS)}")
-        if skill == "Grammar" and v not in GRAMMAR_SUB_SKILLS:
-            raise ValueError(f"sub_skill for Grammar must be one of: {', '.join(GRAMMAR_SUB_SKILLS)}")
-        return v
-
-    @field_validator("url")
-    @classmethod
-    def validate_url(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        if not v.startswith(("https://", "http://")):
-            raise ValueError("URL must start with https:// or http://")
-        return v.strip()
-
-    @field_validator("thumbnail")
-    @classmethod
-    def validate_thumbnail(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        if not v.startswith(("https://", "http://")):
-            raise ValueError("Thumbnail URL must start with https:// or http://")
-        return v.strip()
-
-    @field_validator("tags")
-    @classmethod
-    def normalize_tags(cls, v: List[str]) -> List[str]:
-        seen = set()
-        result = []
-        for tag in v:
-            normalized = tag.strip().lower()
-            if normalized and normalized not in seen:
-                seen.add(normalized)
-                result.append(normalized)
-        return result
-
-    @field_validator("minimum_band", "maximum_band")
-    @classmethod
-    def validate_band_range(cls, v: Optional[float], info) -> Optional[float]:
-        if v is not None and (v < 0.0 or v > 9.0):
-            raise ValueError("Band score must be between 0.0 and 9.0")
-        return v
+    language: str = "en"
+    is_free: bool = True
 
 
-class ResourceUpdate(BaseModel):
-    """Schema for partial update of a resource."""
+class ResourceSuggestionUpdate(BaseModel):
+    """Schema for admin editing a suggestion."""
     title: Optional[str] = Field(None, min_length=1, max_length=300)
     description: Optional[str] = None
+    category: Optional[str] = None
+    reason: Optional[str] = None
     type: Optional[str] = None
     source: Optional[str] = None
     author: Optional[str] = None
@@ -175,123 +138,60 @@ class ResourceUpdate(BaseModel):
     estimated_time: Optional[int] = Field(None, ge=0)
     tags: Optional[List[str]] = None
     language: Optional[str] = None
-    verified: Optional[bool] = None
-    official: Optional[bool] = None
     is_free: Optional[bool] = None
-    rating: Optional[float] = Field(None, ge=0.0, le=5.0)
-    popularity_score: Optional[int] = Field(None, ge=0)
-
-    @field_validator("title")
-    @classmethod
-    def strip_title(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError("Title cannot be empty")
-        return stripped
-
-    @field_validator("type")
-    @classmethod
-    def validate_type(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        if v not in RESOURCE_TYPES:
-            raise ValueError(f"type must be one of: {', '.join(RESOURCE_TYPES)}")
-        return v
-
-    @field_validator("skill")
-    @classmethod
-    def validate_skill(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        if v not in RESOURCE_SKILLS:
-            raise ValueError(f"skill must be one of: {', '.join(RESOURCE_SKILLS)}")
-        return v
-
-    @field_validator("url")
-    @classmethod
-    def validate_url(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        if not v.startswith(("https://", "http://")):
-            raise ValueError("URL must start with https:// or http://")
-        return v.strip()
-
-    @field_validator("thumbnail")
-    @classmethod
-    def validate_thumbnail(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        if not v.startswith(("https://", "http://")):
-            raise ValueError("Thumbnail URL must start with https:// or http://")
-        return v.strip()
-
-    @field_validator("minimum_band", "maximum_band")
-    @classmethod
-    def validate_band_range(cls, v: Optional[float]) -> Optional[float]:
-        if v is not None and (v < 0.0 or v > 9.0):
-            raise ValueError("Band score must be between 0.0 and 9.0")
-        return v
+    admin_notes: Optional[str] = None
 
 
-class ResourceResponse(BaseModel):
-    """Schema for a resource response."""
+class ResourceSuggestionVoteResponse(BaseModel):
+    """Schema for vote response."""
+    suggestion_id: str
+    votes: int
+    voted: bool
+
+
+class ResourceSuggestionResponse(BaseModel):
+    """Schema for resource suggestion response."""
     id: str
+    user_id: str
     title: str
-    description: Optional[str] = None
+    description: Optional[str]
+    category: str
+    reason: Optional[str]
+    votes: int = 0
     type: str
-    source: Optional[str] = None
-    author: Optional[str] = None
-    url: Optional[str] = None
-    thumbnail: Optional[str] = None
+    source: Optional[str]
+    author: Optional[str]
+    url: Optional[str]
+    thumbnail: Optional[str]
     skill: str
-    sub_skill: Optional[str] = None
-    minimum_band: Optional[float] = None
-    maximum_band: Optional[float] = None
-    difficulty: Optional[str] = None
-    estimated_time: Optional[int] = None
-    tags: List[str] = Field(default_factory=list)
-    language: str = "en"
-    verified: bool = False
-    official: bool = False
-    is_free: bool = True
-    rating: Optional[float] = None
-    popularity_score: int = 0
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    sub_skill: Optional[str]
+    minimum_band: Optional[float]
+    maximum_band: Optional[float]
+    difficulty: Optional[str]
+    estimated_time: Optional[int]
+    tags: List[str]
+    language: str
+    is_free: bool
+    status: str
+    admin_notes: Optional[str]
+    approved_by: Optional[str]
+    approved_at: Optional[str]
+    rejected_by: Optional[str]
+    rejected_at: Optional[str]
+    resource_id: Optional[str]
+    created_at: Optional[str]
+    updated_at: Optional[str]
+    voted: Optional[bool] = False
 
 
-class ResourceListResponse(BaseModel):
-    """Paginated list of resources."""
-    items: List[ResourceResponse]
-    total: int
-    limit: int
-    offset: int
+class BulkOperationRequest(BaseModel):
+    """Schema for bulk operations."""
+    operation: str = Field(..., description="create, update, or delete")
+    items: List[Dict[str, Any]]
 
 
-class ResourceSearchFilters(BaseModel):
-    """Filters for searching resources."""
-    skill: Optional[str] = None
-    type: Optional[str] = None
-    difficulty: Optional[str] = None
-    minimum_band: Optional[float] = None
-    maximum_band: Optional[float] = None
-    is_free: Optional[bool] = None
-    verified: Optional[bool] = None
-    official: Optional[bool] = None
-    search: Optional[str] = None
-    limit: int = Field(20, ge=1, le=100)
-    offset: int = Field(0, ge=0)
-
-
-class ResourceStats(BaseModel):
-    """Resource catalog statistics."""
-    total_resources: int
-    by_type: dict
-    by_skill: dict
-    by_difficulty: dict
-    avg_rating: Optional[float]
-    free_count: int
-    verified_count: int
-    official_count: int
+class BulkOperationResponse(BaseModel):
+    """Schema for bulk operation response."""
+    success: int
+    failed: int
+    errors: List[Dict[str, Any]]

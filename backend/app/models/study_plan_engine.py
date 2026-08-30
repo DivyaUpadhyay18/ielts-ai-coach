@@ -68,6 +68,28 @@ class StudyPlanGenerateRequest(BaseModel):
         return cleaned
 
 
+class DiagnosticStudyPlanRequest(BaseModel):
+    """Request to generate a personalized roadmap seeded from diagnostic results.
+
+    Unlike `StudyPlanGenerateRequest`, the required profile signals (current
+    band, weakest/strongest skills) are resolved automatically from the user's
+    latest completed diagnostic via the Diagnostic Roadmap Service, so the
+    client only supplies the exam context and optional target overrides.
+    """
+    exam_date: Optional[date] = None
+    daily_minutes_budget: int = Field(60, ge=15, le=480)
+    module: str = Field("academic", pattern="^(academic|general)$")
+    target_band: Optional[float] = Field(None, ge=0, le=9)
+    start_date: Optional[date] = None
+
+    @field_validator("target_band")
+    @classmethod
+    def validate_target(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return None
+        return validate_band(v, "band")
+
+
 class GeneratedTask(BaseModel):
     """A single generated task within a day of the plan."""
     title: str

@@ -3,12 +3,12 @@ FastAPI dependencies for authentication and database access.
 """
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status, Header
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional
-from app.db.supabase import supabase
-from app.db.session import db_session
+from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
 from app.core.security import decode_token
+from app.db.session import db_session
+from app.db.supabase import supabase
 from app.models.auth import UserResponse
 
 # HTTP Bearer security scheme
@@ -16,8 +16,8 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    authorization: Optional[str] = Header(None),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    authorization: str | None = Header(None),
 ) -> str:
     """
     Dependency to verify the JWT token and return the user_id.
@@ -53,9 +53,9 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    authorization: Optional[str] = Header(None),
-) -> Optional[str]:
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    authorization: str | None = Header(None),
+) -> str | None:
     """
     Dependency to optionally get the current user.
     Returns None if not authenticated (no error raised).
@@ -103,7 +103,7 @@ async def get_current_admin(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error checking admin role: {str(e)}",
+            detail=f"Error checking admin role: {e!s}",
         )
 
 
@@ -133,7 +133,7 @@ async def get_current_super_admin(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error checking super admin role: {str(e)}",
+            detail=f"Error checking super admin role: {e!s}",
         )
 
 
@@ -163,7 +163,7 @@ async def get_current_moderator(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error checking moderator role: {str(e)}",
+            detail=f"Error checking moderator role: {e!s}",
         )
 
 
@@ -186,53 +186,93 @@ async def get_current_user_profile(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching user profile: {str(e)}",
+            detail=f"Error fetching user profile: {e!s}",
         )
 
 
 # ---------------------------------------------------------------------------
 # Repository dependencies
 # ---------------------------------------------------------------------------
-from app.repositories.user_repo import UserRepository
-from app.repositories.study_plan_repo import StudyPlanRepository
-from app.repositories.daily_plan_repo import DailyPlanRepository
-from app.repositories.daily_mission_repo import DailyMissionRepository
-from app.repositories.task_repo import TaskRepository
-from app.repositories.resource_management_repo import ResourceRepository
-from app.repositories.progress_repo import ProgressRepository
 from app.repositories.achievement_repo import AchievementRepository
-from app.repositories.notification_repo import NotificationRepository
-from app.repositories.progress_tracking_repo import ProgressTrackingRepository
-from app.repositories.streak_repo import StreakRepository
-from app.repositories.scheduler_repo import SchedulerRepository
-from app.repositories.schedule_history_repo import ScheduleHistoryRepository
 from app.repositories.analytics_repo import AnalyticsRepository
-from app.repositories.resource_quality_repo import ResourceQualityRepository
-from app.services.schedule_history_service import ScheduleHistoryService, schedule_history_service
-from app.services.study_plan_generator import StudyPlanGenerator, study_plan_generator
-from app.services.adaptive_scheduler import AdaptiveSchedulerService, adaptive_scheduler
-from app.services.exam_countdown import ExamCountdownService, exam_countdown_service
-from app.services.prediction_engine import PredictionEngineService, prediction_engine_service
-from app.services.diagnostic_service import DiagnosticService, diagnostic_service
-from app.services.reading_diagnostic_service import ReadingDiagnosticService, reading_diagnostic_service
-from app.services.listening_diagnostic_service import ListeningDiagnosticService, listening_diagnostic_service
-from app.services.writing_diagnostic_service import WritingDiagnosticService, writing_diagnostic_service
-from app.services.speaking_diagnostic_service import SpeakingDiagnosticService, speaking_diagnostic_service
-from app.services.vocab_grammar_diagnostic_service import VocabGrammarDiagnosticService, vocab_grammar_diagnostic_service
 from app.repositories.band_estimation_repo import BandEstimationRepository
-from app.services.band_estimation_service import BandEstimationService, band_estimation_service
-from app.services.weekly_report_service import WeeklyReportService, weekly_report_service
-from app.services.ai_recommendations_service import AiRecommendationsService, ai_recommendations_service
-from app.services.mentor_memory_service import MentorMemoryService, mentor_memory_service
+from app.repositories.daily_mission_repo import DailyMissionRepository
+from app.repositories.daily_plan_repo import DailyPlanRepository
+from app.repositories.notification_repo import NotificationRepository
+from app.repositories.progress_repo import ProgressRepository
+from app.repositories.progress_tracking_repo import ProgressTrackingRepository
+from app.repositories.resource_management_repo import ResourceRepository
+from app.repositories.resource_quality_repo import ResourceQualityRepository
+from app.repositories.schedule_history_repo import ScheduleHistoryRepository
+from app.repositories.scheduler_repo import SchedulerRepository
+from app.repositories.streak_repo import StreakRepository
+from app.repositories.study_plan_repo import StudyPlanRepository
+from app.repositories.task_repo import TaskRepository
+from app.repositories.user_repo import UserRepository
+from app.services.adaptive_scheduler import AdaptiveSchedulerService, adaptive_scheduler
 from app.services.ai_mentor_service import AIMentorService, ai_mentor_service
-from app.services.writing_workspace_service import WritingWorkspaceService
+from app.services.ai_recommendations_service import (
+    AiRecommendationsService,
+    ai_recommendations_service,
+)
+from app.services.band_estimation_service import (
+    BandEstimationService,
+    band_estimation_service,
+)
+from app.services.diagnostic_service import DiagnosticService, diagnostic_service
+from app.services.exam_countdown import ExamCountdownService, exam_countdown_service
+from app.services.listening_diagnostic_service import (
+    ListeningDiagnosticService,
+    listening_diagnostic_service,
+)
+from app.services.mentor_memory_service import (
+    MentorMemoryService,
+    mentor_memory_service,
+)
+from app.services.prediction_engine import (
+    PredictionEngineService,
+    prediction_engine_service,
+)
+from app.services.reading_diagnostic_service import (
+    ReadingDiagnosticService,
+    reading_diagnostic_service,
+)
+from app.services.schedule_history_service import (
+    ScheduleHistoryService,
+    schedule_history_service,
+)
+from app.services.speaking_diagnostic_service import (
+    SpeakingDiagnosticService,
+    speaking_diagnostic_service,
+)
+from app.services.speaking_test_service import SpeakingTestService
+from app.services.study_plan_generator import StudyPlanGenerator, study_plan_generator
+from app.services.vocab_grammar_diagnostic_service import (
+    VocabGrammarDiagnosticService,
+    vocab_grammar_diagnostic_service,
+)
+from app.services.weekly_report_service import (
+    WeeklyReportService,
+    weekly_report_service,
+)
+from app.services.writing_analytics_service import WritingAnalyticsService
+from app.services.writing_attempt_service import WritingAttemptService
+from app.services.speaking_analytics_service import SpeakingAnalyticsService
+from app.services.writing_band_examples_engine import WritingBandExamplesEngine
+from app.services.speaking_error_analysis_engine import SpeakingErrorAnalysisEngine
+from app.services.speaking_improvement_plan_engine import SpeakingImprovementPlanEngine
+from app.services.speaking_reattempt_service import SpeakingReattemptService
+from app.services.speaking_practice_mode_engine import SpeakingPracticeModeEngine
+from app.services.speaking_practice_coach_engine import SpeakingCoachEngine
+from app.services.writing_coach_service import WritingCoachService
+from app.services.writing_diagnostic_service import (
+    WritingDiagnosticService,
+    writing_diagnostic_service,
+)
 from app.services.writing_evaluation_engine import WritingEvaluationEngine
 from app.services.writing_improvement_plan_engine import WritingImprovementPlanEngine
-from app.services.writing_band_examples_engine import WritingBandExamplesEngine
-from app.services.writing_analytics_service import WritingAnalyticsService
 from app.services.writing_mission_service import WritingMissionService
-from app.services.writing_attempt_service import WritingAttemptService
-from app.services.writing_coach_service import WritingCoachService
+from app.services.writing_workspace_service import WritingWorkspaceService
 
 
 # Writing Workspace service factory
@@ -259,10 +299,46 @@ def get_writing_band_examples_engine() -> WritingBandExamplesEngine:
     return WritingBandExamplesEngine(db_session)
 
 
+# Speaking Error Analysis Engine factory
+def get_speaking_error_analysis_engine() -> SpeakingErrorAnalysisEngine:
+    from app.db.session import db_session
+    return SpeakingErrorAnalysisEngine(db_session)
+
+
+# Speaking Improvement Plan Engine factory
+def get_speaking_improvement_plan_engine() -> SpeakingImprovementPlanEngine:
+    from app.db.session import db_session
+    return SpeakingImprovementPlanEngine(db_session)
+
+
+# Speaking Reattempt Service factory
+def get_speaking_reattempt_service() -> SpeakingReattemptService:
+    from app.db.session import db_session
+    return SpeakingReattemptService(db_session)
+
+
+# Speaking Practice Mode Engine factory
+def get_speaking_practice_mode_engine() -> SpeakingPracticeModeEngine:
+    from app.db.session import db_session
+    return SpeakingPracticeModeEngine(db_session)
+
+
+# Speaking Interactive Coach Engine factory
+def get_speaking_coach_engine() -> SpeakingCoachEngine:
+    from app.db.session import db_session
+    return SpeakingCoachEngine(db_session)
+
+
 # Writing Analytics service factory
 def get_writing_analytics_service() -> WritingAnalyticsService:
     from app.db.session import db_session
     return WritingAnalyticsService(db_session)
+
+
+# Speaking Analytics service factory
+def get_speaking_analytics_service() -> SpeakingAnalyticsService:
+    from app.db.session import db_session
+    return SpeakingAnalyticsService(db_session)
 
 
 # Writing Mission service factory
@@ -424,3 +500,22 @@ def get_reflection_engine() -> ReflectionEngine:
     """ReflectionEngine singleton bound to the shared DB session."""
     from app.services.reflection_engine import ReflectionEngine
     return ReflectionEngine(db=db_session)
+
+
+def get_speaking_test_service() -> SpeakingTestService:
+    """SpeakingTestService singleton bound to the shared DB session."""
+    from app.db.session import db_session
+    return SpeakingTestService(db_session)
+
+
+def get_speaking_audio_pipeline_service() -> "SpeakingAudioPipelineService":
+    """SpeakingAudioPipelineService singleton bound to the shared DB session."""
+    from app.db.session import db_session
+    from app.services.speaking_audio_pipeline import SpeakingAudioPipelineService
+    return SpeakingAudioPipelineService(db_session)
+
+
+def get_speech_to_text_service() -> "SpeechToTextService":
+    """SpeechToTextService singleton (server-side speech-to-text client)."""
+    from app.services.speech_to_text_service import SpeechToTextService
+    return SpeechToTextService()

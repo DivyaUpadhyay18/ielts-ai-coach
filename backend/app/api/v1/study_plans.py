@@ -13,6 +13,7 @@ from app.api.deps import (
 from app.core.exceptions import NotFoundError
 from app.models.study_plan import StudyPlanCreate, StudyPlanUpdate, StudyPlanResponse
 from app.models.study_plan_engine import (
+    DiagnosticStudyPlanRequest,
     StudyPlanDaysResponse,
     StudyPlanGenerateRequest,
     StudyPlanGenerateResponse,
@@ -136,6 +137,30 @@ async def generate_study_plan(
     creates a new version.
     """
     return generator.generate(user_id, data)
+
+
+@router.post(
+    "/generate-from-diagnostic",
+    response_model=StudyPlanGenerateResponse,
+    status_code=201,
+    summary="Generate a personalized roadmap from diagnostic results",
+)
+async def generate_study_plan_from_diagnostic(
+    data: DiagnosticStudyPlanRequest,
+    user_id: str = Depends(get_current_user),
+    generator: StudyPlanGenerator = Depends(get_study_plan_generator),
+):
+    """
+    Generate a personalized study plan seeded from the latest diagnostic results
+    instead of manual assumptions.
+
+    The current band and weakest/strongest skills are resolved automatically from
+    the user's most recent completed diagnostic. Provide an `exam_date` (or have
+    it set on your profile); `target_band`, `daily_minutes_budget`, `module`, and
+    `start_date` are optional overrides.
+    """
+    return generator.generate_from_diagnostic(user_id, data)
+
 
 
 @router.get(

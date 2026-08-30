@@ -438,3 +438,64 @@ export interface WritingCoachConversationListResponse {
   limit: number;
   offset: number;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Speaking Error Analysis types
+// ─────────────────────────────────────────────────────────────
+
+export type SpeakingIssueType =
+  | "Grammar"
+  | "Repeated Vocabulary"
+  | "Weak Vocabulary"
+  | "Unnatural Expression"
+  | "Filler Words"
+  | "Repetition"
+  | "Incomplete Sentence"
+  | "Hesitation Indicator"
+  | "Coherence Problem"
+  | "Pronunciation";
+
+export type SpeakingSeverity = "critical" | "major" | "minor";
+
+export type SpeakingCriterion =
+  | "fluency_coherence"
+  | "lexical_resource"
+  | "grammatical_range"
+  | "pronunciation";
+
+export interface SpeakingErrorIssue {
+  original_phrase: string;
+  issue_type: SpeakingIssueType;
+  explanation: string;
+  why_problem: string;
+  suggested_improvement: string;
+  criterion_affected: SpeakingCriterion;
+  severity: SpeakingSeverity;
+  context?: string;
+}
+
+export interface SpeakingErrorAnalysis {
+  id: string;
+  response_id: string;
+  part: string;
+  topic: string;
+  issues: SpeakingErrorIssue[];
+  overall_band: number;
+  fluency_coherence_band: number;
+  lexical_resource_band: number;
+  grammatical_range_band: number;
+  pronunciation_band: number;
+  feedback: string;
+  issue_count: number;
+  high_severity_count: number;
+  medium_severity_count: number;
+  low_severity_count: number;
+  is_estimate: boolean;
+  source: string;
+  created_at: string | null;
+}
+
+export interface SpeakingErrorAnalysisListResponse {
+  results: SpeakingErrorAnalysis[];
+  total: number;
+}

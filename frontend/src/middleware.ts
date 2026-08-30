@@ -5,7 +5,9 @@ import type { NextRequest } from 'next/server';
 const protectedRoutes = [
   '/dashboard',
   '/writing',
+  '/writing-workspace',
   '/speaking',
+  '/speaking-test',
   '/roadmap',
   '/analytics',
   '/diagnostic',
@@ -13,6 +15,7 @@ const protectedRoutes = [
   '/profile',
   '/settings',
   '/resources',
+  '/mentor',
 ];
 
 // Auth routes (redirect to dashboard if already authenticated)

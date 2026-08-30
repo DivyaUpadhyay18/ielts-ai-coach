@@ -22,3 +22,21 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Build / TypeScript generated files
+
+frontend/tsconfig.tsbuildinfo
+frontend/build*.txt
+frontend/*_files.txt
+
+# Temporary backend scripts
+
+backend/_*.py
+
+# Verification / debug output
+
+backend/verify_output.txt
+
+# Local test/debug output
+
+backend/test_output.txt

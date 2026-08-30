@@ -96,12 +96,12 @@ def decode_token(token: str, expected_type: str = "access") -> dict:
         raise credentials_exception
 
 
-def create_tokens(user_id: str, email: str) -> Tuple[str, str]:
+def create_tokens(user_id: str, email: str, role: str = "user") -> Tuple[str, str]:
     """
     Create both access and refresh tokens for a user.
     Returns (access_token, refresh_token).
     """
-    token_data = {"sub": user_id, "email": email}
+    token_data = {"sub": user_id, "email": email, "role": role}
     access_token = create_access_token(data=token_data)
     refresh_token = create_refresh_token(data=token_data)
     return access_token, refresh_token

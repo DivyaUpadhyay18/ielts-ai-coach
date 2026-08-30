@@ -9,6 +9,7 @@ export interface UserProfile {
   full_name?: string;
   avatar_url?: string;
   is_active?: boolean;
+  role?: 'user' | 'moderator' | 'admin' | 'super_admin';
   created_at?: string;
   // Onboarding / profile fields
   country?: string;
@@ -80,6 +81,7 @@ export const useAuthStore = create<AuthState>()(
                 full_name: profile.full_name,
                 avatar_url: profile.avatar_url,
                 is_active: profile.is_active,
+                role: profile.role,
                 created_at: profile.created_at,
               }, 
               isLoading: false, 
@@ -101,6 +103,7 @@ export const useAuthStore = create<AuthState>()(
                     email: profile.email,
                     full_name: profile.full_name,
                     avatar_url: profile.avatar_url,
+                    role: profile.role,
                   }, 
                   isLoading: false, 
                   isInitialized: true 
@@ -135,6 +138,7 @@ export const useAuthStore = create<AuthState>()(
               email: profile.email,
               full_name: profile.full_name,
               avatar_url: profile.avatar_url,
+              role: profile.role,
             },
             isLoading: false,
             error: null,
@@ -164,6 +168,7 @@ export const useAuthStore = create<AuthState>()(
               email: profile.email,
               full_name: profile.full_name,
               avatar_url: profile.avatar_url,
+              role: profile.role,
             },
             isLoading: false,
             error: null,
@@ -211,6 +216,7 @@ export const useAuthStore = create<AuthState>()(
               email: profile.email,
               full_name: profile.full_name,
               avatar_url: profile.avatar_url,
+              role: profile.role,
             },
           });
         } catch {

@@ -3,24 +3,29 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   BarChart3,
+  Eye,
+  CheckCircle2,
+  Bookmark,
+  ThumbsUp,
+  Star,
+  Clock,
   Target,
-  ArrowUpRight,
-  ArrowDownRight,
+  TrendingUp,
+  Activity,
+  AlertCircle,
   Download,
   Filter,
   Info,
-  Clock,
-  Zap,
-  Flame,
-  TrendingUp,
-  Activity,
   PenTool,
   Mic,
   BookOpen,
   Bell,
   Sparkles,
   GraduationCap,
-  AlertCircle,
+  Flame,
+  Zap,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -28,15 +33,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { progressTrackingService } from "@/services/api";
+import { analyticsService } from "@/services/api";
 import type {
-  ProgressOverviewResponse,
-  ChartsResponse,
-  HistoryResponse,
-  RecentHistoryItem,
-  ChartPointData,
-  MissionSkill,
-} from "@/types";
+  AnalyticsDashboardResponse,
+  AnalyticsTrendPoint,
+  SkillBreakdown,
+  ResourcePerformanceItem,
+  AnalyticsEvent,
+} from "@/types/analytics";
 
 // ─────────────────────────────────────────────────────────────
 // Skill → icon/color mapping
@@ -55,12 +59,27 @@ function skillStyle(skill: string | null) {
   return SKILL_STYLES[skill || "general"] || SKILL_STYLES.general;
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
   try {
     return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch {
     return iso || "—";
   }
+}
+
+function formatEventName(event: string): string {
+  const map: Record<string, string> = {
+    resource_viewed: "Resource Viewed",
+    resource_completed: "Resource Completed",
+    resource_bookmarked: "Resource Bookmarked",
+    resource_unbookmarked: "Resource Unbookmarked",
+    resource_liked: "Resource Liked",
+    resource_unliked: "Resource Unliked",
+    resource_rated: "Resource Rated",
+    study_session_logged: "Study Session",
+  };
+  return map[event] || event.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -86,19 +105,19 @@ function AnalyticsSkeleton() {
 // ─────────────────────────────────────────────────────────────
 // Pure bar chart (no external chart lib needed)
 // ─────────────────────────────────────────────────────────────
-function BarChart({ series }: { series: ChartPointData[] }) {
-  const max = Math.max(...series.map((s) => s.minutes || s.xp), 1);
+function TrendChart({ series }: { series: AnalyticsTrendPoint[] }) {
+  const max = Math.max(...series.map((s) => Math.max(s.views, s.completions, s.study_minutes)), 1);
   return (
-    <div className="h-[280px] w-full bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-border flex items-end justify-around gap-2 p-6 relative">
+    <div className="h-[280px] w-full bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-border flex items-end justify-around gap-1 p-6 relative">
       {series.map((point, i) => {
-        const h = Math.max(4, Math.round(((point.minutes || point.xp || 0) / max) * 100));
+        const h = Math.max(4, Math.round(((point.views || point.study_minutes || 0) / max) * 100));
         return (
-          <div key={i} className="w-full max-w-[48px] group relative flex flex-col items-center justify-end h-full">
+          <div key={i} className="w-full max-w-[40px] group relative flex flex-col items-center justify-end h-full">
             <div className="relative flex items-end w-full justify-center" style={{ height: `${h}%` }}>
               <div className="w-full bg-primary/20 group-hover:bg-primary transition-all rounded-t-sm" style={{ height: "100%" }} />
               <div className="absolute inset-x-0 -bottom-0 h-full flex items-end justify-center">
                 <span className="text-[9px] font-bold text-muted-foreground bg-background/90 rounded px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap mb-1">
-                  {point.minutes} min • {point.xp} XP
+                  {point.views} views • {point.study_minutes} min
                 </span>
               </div>
             </div>
@@ -113,31 +132,24 @@ function BarChart({ series }: { series: ChartPointData[] }) {
 // ─────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────
-export default function ProgressAnalytics() {
-  const [overview, setOverview] = useState<ProgressOverviewResponse | null>(null);
-  const [charts, setCharts] = useState<ChartsResponse | null>(null);
-  const [history, setHistory] = useState<HistoryResponse | null>(null);
+export default function AnalyticsDashboard() {
+  const [dashboard, setDashboard] = useState<AnalyticsDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [days, setDays] = useState(30);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [ov, ch, hist] = await Promise.all([
-        progressTrackingService.getOverview(),
-        progressTrackingService.getCharts(),
-        progressTrackingService.getHistory(50),
-      ]);
-      setOverview(ov);
-      setCharts(ch);
-      setHistory(hist);
+      const data = await analyticsService.getDashboard(days);
+      setDashboard(data);
     } catch (err: any) {
       setError(err?.response?.data?.detail?.message || err?.message || "Failed to load analytics");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [days]);
 
   useEffect(() => {
     fetchAll();
@@ -151,7 +163,7 @@ export default function ProgressAnalytics() {
     );
   }
 
-  if (error && !overview) {
+  if (error && !dashboard) {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center py-32 text-center space-y-4">
@@ -166,67 +178,95 @@ export default function ProgressAnalytics() {
     );
   }
 
-  // Quick stats — real progress data
-  const daily = overview?.daily;
-  const weekly = overview?.weekly;
-  const monthly = overview?.monthly;
-  const xp = overview?.xp;
-  const streak = overview?.streak;
+  const summary = dashboard?.summary;
+  const trends = dashboard?.trends ?? [];
+  const skills = dashboard?.skill_breakdown ?? [];
+  const topResources = dashboard?.top_resources ?? [];
+  const recentEvents = dashboard?.recent_events ?? [];
 
   const stats = [
     {
-      label: "XP Today",
-      value: String(xp?.today ?? 0),
-      sub: `${xp?.total ?? 0} lifetime • Level ${xp?.level ?? 1}`,
-      icon: Zap,
-      iconBg: "bg-amber-100",
-      iconColor: "text-amber-600",
-      trend: null,
+      label: "Total Views",
+      value: String(summary?.total_views ?? 0),
+      sub: `${summary?.active_days ?? 0} active days`,
+      icon: Eye,
+      iconBg: "bg-blue-100",
+      iconColor: "text-blue-600",
     },
     {
-      label: "Study Streak",
-      value: `${streak?.current ?? 0} days`,
-      sub: streak?.at_risk ? "Complete a mission to protect it" : `Longest: ${streak?.longest ?? 0} days`,
-      icon: Flame,
-      iconBg: "bg-orange-100",
-      iconColor: "text-orange-600",
-      trend: null,
+      label: "Completions",
+      value: String(summary?.total_completions ?? 0),
+      sub: `${summary?.completion_rate ?? 0}% completion rate`,
+      icon: CheckCircle2,
+      iconBg: "bg-emerald-100",
+      iconColor: "text-emerald-600",
     },
     {
       label: "Study Time",
-      value: `${overview?.study_time.today_minutes ?? 0}`,
-      sub: `${overview?.study_time.week_minutes ?? 0} min this week`,
+      value: `${Math.round((summary?.total_study_minutes ?? 0) / 60)}h`,
+      sub: `${summary?.total_study_minutes ?? 0} min total`,
       icon: Clock,
-      iconBg: "bg-blue-100",
-      iconColor: "text-blue-600",
-      trend: null,
+      iconBg: "bg-amber-100",
+      iconColor: "text-amber-600",
     },
     {
-      label: "Total Tasks",
-      value: String(overview?.total_tasks ?? 0),
-      sub: `${overview?.total_minutes ?? 0} total minutes logged`,
-      icon: TrendingUp,
-      iconBg: "bg-emerald-100",
-      iconColor: "text-emerald-600",
-      trend: null,
+      label: "Bookmarks",
+      value: String(summary?.total_bookmarks ?? 0),
+      sub: `${summary?.total_likes ?? 0} likes • ${summary?.total_ratings ?? 0} ratings`,
+      icon: Bookmark,
+      iconBg: "bg-purple-100",
+      iconColor: "text-purple-600",
     },
   ];
 
-  const skillTotals = charts?.skill_totals ?? {};
-  const skillRows = Object.entries(skillTotals).map(([skill, totals]) => ({
-    name: skillStyle(skill).label,
-    skill,
-    minutes: totals.minutes,
-    tasks: totals.tasks,
-    icon: skillStyle(skill).icon,
-    color: skillStyle(skill).color,
-    bg: skillStyle(skill).bg,
-  }));
-  skillRows.sort((a, b) => b.minutes - a.minutes);
-  const maxSkillMinutes = Math.max(...skillRows.map((r) => r.minutes), 1);
+  const rateCards = [
+    {
+      label: "Completion Rate",
+      value: `${summary?.completion_rate ?? 0}%`,
+      sub: "Completions / Views",
+      icon: Target,
+      iconBg: "bg-emerald-100",
+      iconColor: "text-emerald-600",
+      progress: summary?.completion_rate ?? 0,
+      variant: "success" as const,
+    },
+    {
+      label: "Success Rate",
+      value: `${summary?.success_rate ?? 0}%`,
+      sub: "Tasks / Sessions",
+      icon: TrendingUp,
+      iconBg: "bg-blue-100",
+      iconColor: "text-blue-600",
+      progress: summary?.success_rate ?? 0,
+      variant: "accent" as const,
+    },
+    {
+      label: "Drop-off Rate",
+      value: `${summary?.drop_off_rate ?? 0}%`,
+      sub: "100% - Completion",
+      icon: ArrowDownRight,
+      iconBg: "bg-rose-100",
+      iconColor: "text-rose-600",
+      progress: summary?.drop_off_rate ?? 0,
+      variant: "default" as const,
+    },
+    {
+      label: "Avg Study / Session",
+      value: `${summary?.avg_study_time_per_session ?? 0} min`,
+      sub: `${summary?.total_sessions ?? 0} total sessions`,
+      icon: Zap,
+      iconBg: "bg-amber-100",
+      iconColor: "text-amber-600",
+      progress: Math.min((summary?.avg_study_time_per_session ?? 0) / 60 * 100, 100),
+      variant: "warning" as const,
+    },
+  ];
 
-  const dailySeries = charts?.daily_series ?? [];
-  const historyItems = history?.items ?? [];
+  const skillRows = skills.map((s) => ({
+    ...s,
+    ...skillStyle(s.skill),
+  }));
+  const maxSkillMinutes = Math.max(...skillRows.map((r) => r.study_minutes), 1);
 
   return (
     <DashboardLayout>
@@ -235,16 +275,26 @@ export default function ProgressAnalytics() {
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Performance Analytics</h1>
-            <p className="text-muted-foreground">Real insights from your logged study activity.</p>
+            <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
+            <p className="text-muted-foreground">Track views, completions, bookmarks, likes, ratings, and study time.</p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 rounded-lg border border-border p-1">
+              {[7, 30, 90].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDays(d)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    days === d ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
+                  }`}
+                >
+                  {d}D
+                </button>
+              ))}
+            </div>
             <Button variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" /> Export Data
+              <Download className="mr-2 h-4 w-4" /> Export
             </Button>
-            <Badge variant="secondary" className="h-8 px-3">
-              <Filter className="mr-1 h-3.5 w-3.5" /> Last 7 Days
-            </Badge>
           </div>
         </div>
 
@@ -276,53 +326,74 @@ export default function ProgressAnalytics() {
           ))}
         </div>
 
+        {/* 2. Rate Metrics */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {rateCards.map((card) => (
+            <Card key={card.label}>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-muted-foreground">{card.label}</p>
+                  <div className={`p-2 rounded-lg ${card.iconBg} ${card.iconColor}`}>
+                    <card.icon className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <h3 className="text-3xl font-bold">{card.value}</h3>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">{card.sub}</p>
+                <Progress value={card.progress} className="h-1.5 mt-3" variant={card.variant} />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
         <div className="grid gap-8 lg:grid-cols-3">
 
-          {/* 2. Main Chart: Minutes + XP over last 7 days */}
+          {/* 3. Main Trend Chart */}
           <Card className="lg:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Weekly Study Activity</CardTitle>
-                <CardDescription>Minutes studied and XP earned over the last 7 days.</CardDescription>
+                <CardTitle>Activity Trends</CardTitle>
+                <CardDescription>Views, completions, and study minutes over the last {days} days.</CardDescription>
               </div>
               <BarChart3 className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent className="pt-4">
-              {dailySeries.length === 0 ? (
+              {trends.length === 0 || trends.every((t) => t.views === 0 && t.study_minutes === 0) ? (
                 <div className="h-[280px] flex flex-col items-center justify-center text-center space-y-3">
                   <Activity className="h-8 w-8 text-muted-foreground" />
                   <p className="text-muted-foreground text-sm max-w-xs">
-                    No study activity yet. Complete daily missions to unlock your activity chart.
+                    No activity yet. View resources and log study sessions to unlock your analytics.
                   </p>
                 </div>
               ) : (
-                <BarChart series={dailySeries} />
+                <TrendChart series={trends} />
               )}
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-primary" /> Study minutes
+                  <span className="h-2.5 w-2.5 rounded-full bg-primary" /> Views
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400" /> XP earned
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" /> Study minutes
                 </span>
               </div>
             </CardContent>
           </Card>
 
-          {/* 3. Skill Breakdown */}
+          {/* 4. Skill Breakdown */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-primary" /> Skill Focus
               </CardTitle>
-              <CardDescription>Study minutes by skill (lifetime).</CardDescription>
+              <CardDescription>Study minutes by skill.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               {skillRows.length === 0 ? (
                 <div className="flex flex-col items-center py-8 text-center space-y-2">
                   <Info className="h-6 w-6 text-muted-foreground" />
                   <p className="text-xs text-muted-foreground max-w-[200px]">
-                    Complete missions to see your skill balance.
+                    Log study sessions to see your skill balance.
                   </p>
                 </div>
               ) : (
@@ -332,53 +403,39 @@ export default function ProgressAnalytics() {
                     <div key={row.skill} className="space-y-2">
                       <div className="flex justify-between items-end">
                         <span className="flex items-center gap-1.5 text-xs font-bold">
-                          <Icon className={`h-3.5 w-3.5 ${row.color}`} /> {row.name}
+                          <Icon className={`h-3.5 w-3.5 ${row.color}`} /> {row.label}
                         </span>
                         <span className="text-[10px] text-muted-foreground">
-                          {row.minutes} min • {row.tasks} tasks
+                          {row.study_minutes} min • {row.views} views
                         </span>
                       </div>
                       <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: `${Math.round((row.minutes / maxSkillMinutes) * 100)}%` }}
+                          style={{ width: `${Math.round((row.study_minutes / maxSkillMinutes) * 100)}%` }}
                         />
                       </div>
                     </div>
                   );
                 })
               )}
-
-              {/* Weekly progress summary */}
-              <div className="pt-3 border-t border-border space-y-3">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Daily goal</span>
-                  <span className="font-bold">{daily?.minutes ?? 0} / {daily?.target_minutes ?? 0} min</span>
-                </div>
-                <Progress value={daily?.percent ?? 0} className="h-2" variant="success" />
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Weekly goal</span>
-                  <span className="font-bold">{weekly?.minutes ?? 0} / {weekly?.target_minutes ?? 0} min</span>
-                </div>
-                <Progress value={weekly?.percent ?? 0} className="h-2" variant="accent" />
-              </div>
             </CardContent>
           </Card>
 
         </div>
 
-        {/* 4. Recent Study History */}
+        {/* 5. Top Resources */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Study History</CardTitle>
-            <CardDescription>A log of your logged missions and practice sessions.</CardDescription>
+            <CardTitle>Top Performing Resources</CardTitle>
+            <CardDescription>Resources ranked by views and completion rate.</CardDescription>
           </CardHeader>
           <CardContent>
-            {historyItems.length === 0 ? (
+            {topResources.length === 0 ? (
               <div className="flex flex-col items-center py-12 text-center space-y-3">
-                <Activity className="h-8 w-8 text-muted-foreground" />
+                <BookOpen className="h-8 w-8 text-muted-foreground" />
                 <p className="text-muted-foreground text-sm max-w-sm">
-                  No study sessions logged yet. Complete daily missions to start building your history.
+                  No resource activity yet. View and complete resources to see performance data.
                 </p>
               </div>
             ) : (
@@ -386,30 +443,46 @@ export default function ProgressAnalytics() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-muted-foreground">
-                      <th className="text-left font-medium py-3 px-2">Date</th>
-                      <th className="text-left font-medium py-3 px-2">Activity</th>
-                      <th className="text-left font-medium py-3 px-2">Skill</th>
-                      <th className="text-right font-medium py-3 px-2">Minutes</th>
-                      <th className="text-right font-medium py-3 px-2">XP</th>
+                      <th className="text-left font-medium py-3 px-2">Resource</th>
+                      <th className="text-left font-medium py-3 px-2">Type</th>
+                      <th className="text-right font-medium py-3 px-2">Views</th>
+                      <th className="text-right font-medium py-3 px-2">Completions</th>
+                      <th className="text-right font-medium py-3 px-2">Bookmarks</th>
+                      <th className="text-right font-medium py-3 px-2">Likes</th>
+                      <th className="text-right font-medium py-3 px-2">Rating</th>
+                      <th className="text-right font-medium py-3 px-2">Completion %</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {historyItems.slice(0, 12).map((item: RecentHistoryItem) => {
-                      const style = skillStyle(item.skill);
+                    {topResources.slice(0, 8).map((r: ResourcePerformanceItem) => {
+                      const style = skillStyle(r.skill);
                       const Icon = style.icon;
                       return (
-                        <tr key={item.id} className="group hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                          <td className="py-4 px-2 text-muted-foreground">{formatDate(item.date)}</td>
-                          <td className="py-4 px-2 font-medium">{item.title}</td>
+                        <tr key={r.resource_id} className="group hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
                           <td className="py-4 px-2">
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${style.bg} ${style.color}`}>
-                              <Icon className="h-3 w-3" /> {style.label}
+                            <div className="flex items-center gap-2">
+                              <span className={`p-1.5 rounded-lg ${style.bg} ${style.color}`}>
+                                <Icon className="h-3.5 w-3.5" />
+                              </span>
+                              <span className="font-medium max-w-[200px] truncate">{r.title}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-2">
+                            <Badge variant="secondary" className="text-[10px]">{r.type}</Badge>
+                          </td>
+                          <td className="py-4 px-2 text-right font-bold">{r.views}</td>
+                          <td className="py-4 px-2 text-right">{r.completions}</td>
+                          <td className="py-4 px-2 text-right">{r.bookmarks}</td>
+                          <td className="py-4 px-2 text-right">{r.likes}</td>
+                          <td className="py-4 px-2 text-right">
+                            <span className="inline-flex items-center gap-1">
+                              <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
+                              {r.avg_rating > 0 ? r.avg_rating.toFixed(1) : "—"}
                             </span>
                           </td>
-                          <td className="py-4 px-2 text-right font-bold">{item.minutes}</td>
                           <td className="py-4 px-2 text-right">
-                            <Badge variant={item.xp > 0 ? "warning" : "secondary"} className="text-[10px]">
-                              +{item.xp} XP
+                            <Badge variant={r.completion_rate >= 50 ? "success" : "secondary"} className="text-[10px]">
+                              {r.completion_rate}%
                             </Badge>
                           </td>
                         </tr>
@@ -419,10 +492,47 @@ export default function ProgressAnalytics() {
                 </table>
               </div>
             )}
-            {historyItems.length > 12 && (
-              <button className="w-full mt-4 text-center text-xs text-primary hover:underline">
-                Load More History
-              </button>
+          </CardContent>
+        </Card>
+
+        {/* 6. Recent Events */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Activity</CardTitle>
+            <CardDescription>Your latest analytics events.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {recentEvents.length === 0 ? (
+              <div className="flex flex-col items-center py-12 text-center space-y-3">
+                <Activity className="h-8 w-8 text-muted-foreground" />
+                <p className="text-muted-foreground text-sm max-w-sm">
+                  No events tracked yet. Your interactions will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentEvents.slice(0, 10).map((ev: AnalyticsEvent) => {
+                  const props = ev.properties || {};
+                  const isPositive = !ev.event.includes("un");
+                  return (
+                    <div key={ev.id} className="flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                      <div className={`p-2 rounded-lg ${isPositive ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"}`}>
+                        {isPositive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{formatEventName(ev.event)}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {ev.entity_type ? `${ev.entity_type} • ` : ""}
+                          {props.skill ? `${props.skill} • ` : ""}
+                          {props.minutes ? `${props.minutes} min • ` : ""}
+                          {props.rating ? `${props.rating}★ • ` : ""}
+                          {formatDate(ev.timestamp)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -431,4 +541,3 @@ export default function ProgressAnalytics() {
     </DashboardLayout>
   );
 }
-

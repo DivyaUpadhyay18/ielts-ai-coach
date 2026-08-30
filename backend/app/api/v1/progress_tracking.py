@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query
 from typing import List, Optional
 
-from app.api.deps import get_current_user, get_progress_tracking_repo
+from app.api.deps import get_current_user, get_progress_tracking_repo, get_analytics_repo
 from app.models.progress_tracking import (
     StudySessionCreate,
     StudySessionResponse,
@@ -27,6 +27,7 @@ from app.models.progress_tracking import (
     MonthlyProgress,
 )
 from app.repositories.progress_tracking_repo import ProgressTrackingRepository
+from app.repositories.analytics_repo import AnalyticsRepository
 
 router = APIRouter()
 
@@ -139,15 +140,33 @@ async def log_study_session(
     data: StudySessionCreate,
     user_id: str = Depends(get_current_user),
     repo: ProgressTrackingRepository = Depends(get_progress_tracking_repo),
+    analytics_repo: AnalyticsRepository = Depends(get_analytics_repo),
 ):
     """
     Append a study session to the ledger.
 
     Idempotent when `source_type` + `source_id` are provided: logging the
     same mission/source twice does not double-count minutes or XP.
+
+    Also forwards the session to the analytics event ledger so study time
+    and task completions feed the analytics dashboard.
     """
     payload = data.model_dump(exclude_none=True)
-    return repo.log_session(user_id, payload)
+    result = repo.log_session(user_id, payload)
+
+    # Track analytics (best-effort; do not fail the primary operation)
+    try:
+        analytics_repo.record_study_session(
+            user_id=user_id,
+            minutes=int(payload.get("minutes") or 0),
+            skill=payload.get("skill"),
+            source_type=payload.get("source_type", "task"),
+            source_id=payload.get("source_id"),
+        )
+    except Exception:
+        pass
+
+    return result
 
 
 @router.get(

@@ -1687,7 +1687,20 @@ import type {
   WritingImprovementPlanListResponse,
   BandExample,
   BandExampleListResponse,
+  SpeakingErrorAnalysis,
+  SpeakingErrorAnalysisListResponse,
 } from '@/types/writing-workspace';
+import type {
+  SpeakingImprovementPlan,
+  SpeakingImprovementPlanListResponse,
+} from '@/types/speaking-test';
+import type {
+  SpeakingPracticeSession,
+  SpeakingPracticeSessionListResponse,
+  SpeakingCoachConversation,
+  SpeakingCoachChatResult,
+  SpeakingAnalyticsDashboardResponse,
+} from '@/types/speaking-test';
 
 export const writingWorkspaceService = {
   getPrompts: async (taskType?: string): Promise<WritingWorkspacePromptsResponse> => {
@@ -1900,6 +1913,409 @@ export const writingBandExamplesService = {
 
   listExamples: async (limit = 20): Promise<BandExampleListResponse> => {
     const response = await authApi.get('/writing-band-examples', { params: { limit } });
+    return response.data;
+  },
+};
+
+// ─────────────────────────────────────────────────────────────
+// Speaking Test Workspace service (mirrors /api/v1/speaking-test/*)
+// ─────────────────────────────────────────────────────────────
+import type {
+  SpeakingTestPrompt,
+  SpeakingTestPromptsResponse,
+  SpeakingTestSession,
+  SpeakingTestProgress,
+  SpeakingTestResponse,
+  SpeakingTestResponseSaveRequest,
+  ResponseStartRequest,
+  AudioUploadResponse,
+} from '@/types/speaking-test';
+
+export const speakingTestService = {
+  /** Fetch speaking prompts, optionally filtered by part. */
+  getPrompts: async (part?: string): Promise<SpeakingTestPromptsResponse> => {
+    const response = await authApi.get('/speaking-test/prompts', {
+      params: part ? { part } : undefined,
+    });
+    return response.data;
+  },
+
+  /** Get a single prompt by ID. */
+  getPrompt: async (promptId: string): Promise<SpeakingTestPrompt> => {
+    const response = await authApi.get(`/speaking-test/prompts/${promptId}`);
+    return response.data;
+  },
+
+  /** Start a new test session or resume the existing in-progress one. */
+  startTest: async (): Promise<SpeakingTestSession> => {
+    const response = await authApi.post('/speaking-test/start');
+    return response.data;
+  },
+
+  /** Get the current in-progress session with responses (resume). */
+  getCurrentSession: async (): Promise<SpeakingTestSession | null> => {
+    try {
+      const response = await authApi.get('/speaking-test/session');
+      return response.data;
+    } catch {
+      return null;
+    }
+  },
+
+  /** List all test sessions. */
+  listSessions: async (limit = 20): Promise<{ results: SpeakingTestSession[]; total: number }> => {
+    const response = await authApi.get('/speaking-test/sessions', { params: { limit } });
+    return response.data;
+  },
+
+  /** Get a specific session with all responses. */
+  getSession: async (sessionId: string): Promise<SpeakingTestSession> => {
+    const response = await authApi.get(`/speaking-test/sessions/${sessionId}`);
+    return response.data;
+  },
+
+  /** Start a response for a specific prompt within a session. */
+  startResponse: async (data: ResponseStartRequest): Promise<SpeakingTestResponse> => {
+    const response = await authApi.post('/speaking-test/responses', data);
+    return response.data;
+  },
+
+  /** List all responses for a session. */
+  listResponses: async (sessionId: string): Promise<{ results: SpeakingTestResponse[]; total: number }> => {
+    const response = await authApi.get(`/speaking-test/sessions/${sessionId}/responses`);
+    return response.data;
+  },
+
+  /** Save recording metadata (auto-save). */
+  saveResponse: async (
+    responseId: string,
+    sessionId: string,
+    data: SpeakingTestResponseSaveRequest
+  ): Promise<SpeakingTestResponse> => {
+    const response = await authApi.post(
+      `/speaking-test/responses/${responseId}/save?session_id=${sessionId}`,
+      data
+    );
+    return response.data;
+  },
+
+  /** Complete a response (mark as done). */
+  completeResponse: async (
+    responseId: string,
+    sessionId: string,
+    data?: SpeakingTestResponseSaveRequest
+  ): Promise<SpeakingTestResponse> => {
+    const response = await authApi.post(
+      `/speaking-test/responses/${responseId}/complete?session_id=${sessionId}`,
+      data || {}
+    );
+    return response.data;
+  },
+
+  /** Delete a response so it can be re-recorded. */
+  deleteResponse: async (responseId: string, sessionId: string): Promise<void> => {
+    await authApi.delete(`/speaking-test/responses/${responseId}?session_id=${sessionId}`);
+  },
+
+  /** Get a single response. */
+  getResponse: async (responseId: string, sessionId: string): Promise<SpeakingTestResponse> => {
+    const response = await authApi.get(
+      `/speaking-test/responses/${responseId}?session_id=${sessionId}`
+    );
+    return response.data;
+  },
+
+  /** Advance to the next part. */
+  advancePart: async (sessionId: string): Promise<SpeakingTestSession> => {
+    const response = await authApi.post(`/speaking-test/sessions/${sessionId}/advance`);
+    return response.data;
+  },
+
+  /** Complete the test (logs progress). */
+  completeTest: async (sessionId: string): Promise<SpeakingTestSession> => {
+    const response = await authApi.post(`/speaking-test/sessions/${sessionId}/complete`);
+    return response.data;
+  },
+
+  /** Abandon the test (save for later). */
+  abandonTest: async (sessionId: string): Promise<SpeakingTestSession> => {
+    const response = await authApi.post(`/speaking-test/sessions/${sessionId}/abandon`);
+    return response.data;
+  },
+
+  /** Upload an audio blob to storage; returns the public URL. */
+  uploadAudio: async (file: File): Promise<AudioUploadResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await authApi.post('/speaking-test/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  /** Get current test progress (resume helper). */
+  getProgress: async (): Promise<SpeakingTestProgress> => {
+    const response = await authApi.get('/speaking-test/progress');
+    return response.data;
+  },
+};
+
+// Speaking Error Analysis service (mirrors /api/v1/speaking-error-analysis/*)
+// ─────────────────────────────────────────────────────────────
+export const speakingErrorAnalysisService = {
+  analyzeTranscript: async (
+    responseId: string,
+    part: string = "part_1",
+    topic: string = "",
+  ): Promise<SpeakingErrorAnalysis> => {
+    const response = await authApi.post(`/speaking-error-analysis/${responseId}`, null, {
+      params: { part, topic },
+    });
+    return response.data;
+  },
+
+  getAnalysis: async (responseId: string): Promise<SpeakingErrorAnalysis> => {
+    const response = await authApi.get(`/speaking-error-analysis/${responseId}`);
+    return response.data;
+  },
+
+  listAnalyses: async (limit = 50): Promise<SpeakingErrorAnalysisListResponse> => {
+    const response = await authApi.get('/speaking-error-analysis', { params: { limit } });
+    return response.data;
+  },
+};
+
+// Speaking Improvement Plan service ("Improve My Speaking Band")
+// ─────────────────────────────────────────────────────────────
+export const speakingImprovementPlanService = {
+  generatePlan: async (
+    responseId: string,
+    targetBand?: number,
+  ): Promise<SpeakingImprovementPlan> => {
+    const params: Record<string, any> = {};
+    if (targetBand !== undefined) params.target_band = targetBand;
+    const response = await authApi.post(`/speaking-improvement-plan/${responseId}`, null, {
+      params,
+    });
+    return response.data;
+  },
+
+  getPlan: async (responseId: string): Promise<SpeakingImprovementPlan> => {
+    const response = await authApi.get(`/speaking-improvement-plan/${responseId}`);
+    return response.data;
+  },
+
+  listPlans: async (limit = 50): Promise<SpeakingImprovementPlanListResponse> => {
+    const response = await authApi.get('/speaking-improvement-plan', { params: { limit } });
+    return response.data;
+  },
+};
+
+// Speaking Reattempt Mode service
+// ─────────────────────────────────────────────────────────────
+export interface SpeakingReattemptStartResponse {
+  original_response_id: string;
+  response_id: string;
+  attempt_number: number;
+  part: string;
+  topic: string;
+}
+
+export interface SpeakingCriterionComparison {
+  criterion: string;
+  label: string;
+  attempt_1_band: number;
+  attempt_2_band: number;
+  delta: number;
+  improved: boolean;
+}
+
+export interface SpeakingAttemptComparison {
+  compared: boolean;
+  reason?: string;
+  original_response_id: string;
+  latest_response_id: string;
+  latest_attempt_number: number;
+  overall_band: { attempt_1: number; attempt_2: number; delta: number; improved: boolean };
+  criteria: SpeakingCriterionComparison[];
+  duration_seconds: { attempt_1: number; attempt_2: number; delta: number };
+  filler_words: { attempt_1: number; attempt_2: number; delta: number };
+  error_count: { attempt_1: number; attempt_2: number; delta: number };
+  what_improved: string[];
+  what_stayed_the_same: string[];
+  what_became_worse: string[];
+  focus_next: string[];
+  bonus_xp: number;
+  bonus_reason?: string;
+}
+
+export const speakingReattemptService = {
+  startReattempt: async (responseId: string): Promise<SpeakingReattemptStartResponse> => {
+    const response = await authApi.post(`/speaking-reattempts/${responseId}/start`);
+    return response.data;
+  },
+
+  evaluateReattempt: async (responseId: string): Promise<any> => {
+    const response = await authApi.post(`/speaking-reattempts/${responseId}/evaluate`);
+    return response.data;
+  },
+
+  getComparison: async (responseId: string): Promise<SpeakingAttemptComparison> => {
+    const response = await authApi.get(`/speaking-reattempts/${responseId}/compare`);
+    return response.data;
+  },
+
+  listReattempts: async (limit = 50): Promise<{ results: any[]; total: number }> => {
+    const response = await authApi.get('/speaking-reattempts', { params: { limit } });
+    return response.data;
+  },
+};
+
+// Speaking Practice Mode service
+// ─────────────────────────────────────────────────────────────
+export const speakingPracticeService = {
+  startSession: async (
+    practiceMode: string,
+    targetBand?: number,
+  ): Promise<SpeakingPracticeSession> => {
+    const params: Record<string, any> = { practice_mode: practiceMode };
+    if (targetBand !== undefined) params.target_band = targetBand;
+    const response = await authApi.post('/speaking-practice/sessions', null, { params });
+    return response.data;
+  },
+
+  saveResponse: async (
+    sessionId: string,
+    transcript: string,
+    durationSeconds: number = 0,
+    audioUrl: string = "",
+  ): Promise<SpeakingPracticeSession> => {
+    const response = await authApi.patch(`/speaking-practice/sessions/${sessionId}`, {
+      transcript, duration_seconds: durationSeconds, audio_url: audioUrl,
+    });
+    return response.data;
+  },
+
+  evaluateSession: async (
+    sessionId: string,
+    targetBand?: number,
+  ): Promise<any> => {
+    const params: Record<string, any> = {};
+    if (targetBand !== undefined) params.target_band = targetBand;
+    const response = await authApi.post(`/speaking-practice/sessions/${sessionId}/evaluate`, null, { params });
+    return response.data;
+  },
+
+  getSession: async (sessionId: string): Promise<SpeakingPracticeSession> => {
+    const response = await authApi.get(`/speaking-practice/sessions/${sessionId}`);
+    return response.data;
+  },
+
+  listSessions: async (limit = 50): Promise<SpeakingPracticeSessionListResponse> => {
+    const response = await authApi.get('/speaking-practice/sessions', { params: { limit } });
+    return response.data;
+  },
+};
+
+// Speaking Interactive Coach service
+// ─────────────────────────────────────────────────────────────
+export const speakingCoachService = {
+  startSession: async (
+    contextType: string,
+    contextId: string,
+    options?: {
+      practiceMode?: string;
+      part?: string;
+      targetBand?: number;
+      transcript?: string;
+      question?: string;
+      evaluation?: Record<string, any>;
+      errorAnalysis?: Record<string, any>;
+    },
+  ): Promise<any> => {
+    const params: Record<string, any> = { context_type: contextType, context_id: contextId };
+    if (options) {
+      if (options.practiceMode !== undefined) params.practice_mode = options.practiceMode;
+      if (options.part !== undefined) params.part = options.part;
+      if (options.targetBand !== undefined) params.target_band = options.targetBand;
+    }
+    const data: Record<string, any> = {};
+    if (options) {
+      if (options.transcript !== undefined) data.transcript = options.transcript;
+      if (options.question !== undefined) data.question = options.question;
+      if (options.evaluation !== undefined) data.evaluation = options.evaluation;
+      if (options.errorAnalysis !== undefined) data.error_analysis = options.errorAnalysis;
+    }
+    const response = await authApi.post('/speaking-coach/sessions', data, { params });
+    return response.data;
+  },
+
+  chat: async (sessionId: string, question: string): Promise<SpeakingCoachChatResult> => {
+    const response = await authApi.post(`/speaking-coach/sessions/${sessionId}/chat`, { question });
+    return response.data;
+  },
+
+  getSession: async (sessionId: string): Promise<SpeakingCoachConversation> => {
+    const response = await authApi.get(`/speaking-coach/sessions/${sessionId}`);
+    return response.data;
+  },
+
+  listSessions: async (limit = 50, contextId?: string): Promise<{ results: SpeakingCoachConversation[]; total: number }> => {
+    const params: Record<string, any> = { limit };
+    if (contextId) params.context_id = contextId;
+    const response = await authApi.get('/speaking-coach/sessions', { params });
+    return response.data;
+  },
+};
+
+// Speaking Progress Analytics service
+// ─────────────────────────────────────────────────────────────
+export const speakingAnalyticsService = {
+  getDashboard: async (
+    days: number = 90,
+    part?: string,
+  ): Promise<SpeakingAnalyticsDashboardResponse> => {
+    const params: Record<string, any> = { days };
+    if (part) params.part = part;
+    const response = await authApi.get('/speaking-analytics/dashboard', { params });
+    return response.data;
+  },
+
+  getBandHistory: async (
+    days: number = 90,
+    part?: string,
+  ): Promise<any> => {
+    const params: Record<string, any> = { days };
+    if (part) params.part = part;
+    const response = await authApi.get('/speaking-analytics/band-history', { params });
+    return response.data;
+  },
+
+  getMetrics: async (days: number = 90, part?: string): Promise<any> => {
+    const params: Record<string, any> = { days };
+    if (part) params.part = part;
+    const response = await authApi.get('/speaking-analytics/metrics', { params });
+    return response.data;
+  },
+
+  getCommonErrors: async (days: number = 90): Promise<any> => {
+    const response = await authApi.get('/speaking-analytics/common-errors', { params: { days } });
+    return response.data;
+  },
+
+  getImprovementRate: async (
+    criterion: string = "overall",
+    days: number = 90,
+    part?: string,
+  ): Promise<any> => {
+    const params: Record<string, any> = { criterion, days };
+    if (part) params.part = part;
+    const response = await authApi.get('/speaking-analytics/improvement-rate', { params });
+    return response.data;
+  },
+
+  getAttemptHistory: async (days: number = 90): Promise<any> => {
+    const response = await authApi.get('/speaking-analytics/attempt-history', { params: { days } });
     return response.data;
   },
 };

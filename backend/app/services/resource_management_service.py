@@ -1,138 +1,249 @@
 """
 Resource Management Service.
 
-Provides business logic for the resource catalog with full CRUD support.
+Encapsulates business logic for the resource catalog that doesn't belong
+in the repository layer:
+- Bulk import validation and processing
+- Bulk edit validation
+- Verification workflow orchestration
+- Community suggestion approval workflow
+- Admin analytics aggregation
 """
 from typing import Any, Dict, List, Optional
 
 from app.core.exceptions import NotFoundError, ValidationError
-from app.models.resource_management import ResourceCreate, ResourceUpdate
 from app.repositories.resource_management_repo import ResourceRepository
 
 
 class ResourceManagementService:
-    """Service for managing resources."""
+    """Business logic for resource management operations."""
 
-    def __init__(self, db=None):
-        self.repo = ResourceRepository(db)
+    def __init__(self, repo: ResourceRepository) -> None:
+        self.repo = repo
 
-    async def list_catalog(
+    # ------------------------------------------------------------------
+    # Bulk operations
+    # ------------------------------------------------------------------
+    def bulk_create_resources(
         self,
-        skill: Optional[str] = None,
-        type: Optional[str] = None,
-        difficulty: Optional[str] = None,
-        minimum_band: Optional[float] = None,
-        maximum_band: Optional[float] = None,
-        is_free: Optional[bool] = None,
-        verified: Optional[bool] = None,
-        official: Optional[bool] = None,
-        search: Optional[str] = None,
-        limit: int = 20,
-        offset: int = 0,
-    ) -> tuple[List[Dict[str, Any]], int]:
-        """List resources from the catalog with filters."""
-        items = self.repo.list_catalog(
-            skill=skill,
-            type=type,
-            difficulty=difficulty,
-            minimum_band=minimum_band,
-            maximum_band=maximum_band,
-            is_free=is_free,
-            verified=verified,
-            official=official,
-            search=search,
-            limit=limit,
-            offset=offset,
-        )
-        total = len(items)
-        return items, total
+        resources: List[Dict[str, Any]],
+        admin_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Validate and bulk-create resources.
 
-    def get_by_id(self, resource_id: str) -> Dict[str, Any]:
-        """Get a resource by ID."""
-        return self.repo.get_by_id(resource_id)
+        Returns a summary with created count, errors, and created items.
+        """
+        if not resources:
+            raise ValidationError("No resources provided for bulk upload")
 
-    def create(self, data: ResourceCreate) -> Dict[str, Any]:
-        """Create a new resource."""
-        payload = data.model_dump(exclude_none=True)
-        return self.repo.create(payload)
+        if len(resources) > 500:
+            raise ValidationError("Bulk upload limited to 500 resources per request")
 
-    def update(self, resource_id: str, data: ResourceUpdate) -> Dict[str, Any]:
-        """Update an existing resource."""
-        payload = data.model_dump(exclude_none=True)
-        if not payload:
-            return self.repo.get_by_id(resource_id)
-        return self.repo.update(resource_id, payload)
+        created: List[Dict[str, Any]] = []
+        errors: List[Dict[str, Any]] = []
 
-    def delete(self, resource_id: str) -> None:
-        """Delete a resource."""
-        self.repo.delete(resource_id)
+        for idx, item in enumerate(resources):
+            try:
+                # Validate required fields
+                title = item.get("title")
+                if not title or not str(title).strip():
+                    raise ValidationError(f"Item {idx}: title is required")
 
-    def get_by_skill(self, skill: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get resources filtered by skill."""
-        return self.repo.get_by_skill(skill, limit=limit)
+                resource_type = item.get("type")
+                if not resource_type:
+                    raise ValidationError(f"Item {idx}: type is required")
 
-    def get_by_type(self, resource_type: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get resources filtered by type."""
-        return self.repo.get_by_type(resource_type, limit=limit)
+                skill = item.get("skill")
+                if not skill:
+                    raise ValidationError(f"Item {idx}: skill is required")
 
-    def get_verified(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get verified resources."""
-        return self.repo.get_verified(limit=limit)
+                url = item.get("url")
+                if url and not str(url).startswith(("https://", "http://")):
+                    raise ValidationError(f"Item {idx}: URL must start with https:// or http://")
 
-    def get_official(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get official resources."""
-        return self.repo.get_official(limit=limit)
+                # Normalize tags
+                tags = item.get("tags", [])
+                if tags:
+                    normalized_tags = []
+                    seen = set()
+                    for tag in tags:
+                        normalized = str(tag).strip().lower()
+                        if normalized and normalized not in seen:
+                            seen.add(normalized)
+                            normalized_tags.append(normalized)
+                    item["tags"] = normalized_tags
 
-    def get_free(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get free resources."""
-        return self.repo.get_free(limit=limit)
+                # Set defaults
+                item.setdefault("is_free", True)
+                item.setdefault("verified", False)
+                item.setdefault("official", False)
+                item.setdefault("popularity_score", 0)
+                item.setdefault("language", "en")
 
-    def get_by_difficulty(self, difficulty: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get resources filtered by difficulty."""
-        return self.repo.get_by_difficulty(difficulty, limit=limit)
+                created_item = self.repo.create(item)
+                created.append(created_item)
+            except Exception as e:
+                errors.append({"index": idx, "error": str(e), "data": item})
 
-    def increment_popularity(self, resource_id: str) -> Dict[str, Any]:
-        """Increment the popularity score of a resource."""
-        return self.repo.increment_popularity(resource_id)
+        return {
+            "created": len(created),
+            "errors": len(errors),
+            "created_items": created,
+            "error_details": errors,
+            "admin_id": admin_id,
+        }
 
-    def increment_rating(self, resource_id: str, new_rating: float) -> Dict[str, Any]:
-        """Update the rating of a resource."""
-        return self.repo.increment_rating(resource_id, new_rating)
-
-    def search(
+    def bulk_update_resources(
         self,
-        skill: Optional[str] = None,
-        type: Optional[str] = None,
-        difficulty: Optional[str] = None,
-        minimum_band: Optional[float] = None,
-        maximum_band: Optional[float] = None,
-        is_free: Optional[bool] = None,
-        verified: Optional[bool] = None,
-        official: Optional[bool] = None,
-        search: Optional[str] = None,
-        limit: int = 20,
+        updates: List[Dict[str, Any]],
+        admin_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Validate and bulk-update resources.
+
+        Each item must have an 'id' field and the fields to update.
+        Returns a summary with updated count, errors, and updated items.
+        """
+        if not updates:
+            raise ValidationError("No updates provided for bulk edit")
+
+        if len(updates) > 500:
+            raise ValidationError("Bulk edit limited to 500 resources per request")
+
+        updated: List[Dict[str, Any]] = []
+        errors: List[Dict[str, Any]] = []
+
+        for idx, item in enumerate(updates):
+            try:
+                resource_id = item.get("id")
+                if not resource_id:
+                    raise ValidationError(f"Item {idx}: id is required")
+
+                # Validate URL if present
+                url = item.get("url")
+                if url and not str(url).startswith(("https://", "http://")):
+                    raise ValidationError(f"Item {idx}: URL must start with https:// or http://")
+
+                # Normalize tags if present
+                tags = item.get("tags")
+                if tags is not None:
+                    normalized_tags = []
+                    seen = set()
+                    for tag in tags:
+                        normalized = str(tag).strip().lower()
+                        if normalized and normalized not in seen:
+                            seen.add(normalized)
+                            normalized_tags.append(normalized)
+                    item["tags"] = normalized_tags
+
+                update_data = {k: v for k, v in item.items() if k != "id"}
+                if not update_data:
+                    continue
+
+                updated_item = self.repo.update(resource_id, update_data)
+                updated.append(updated_item)
+            except Exception as e:
+                errors.append({"index": idx, "id": item.get("id"), "error": str(e)})
+
+        return {
+            "updated": len(updated),
+            "errors": len(errors),
+            "updated_items": updated,
+            "error_details": errors,
+            "admin_id": admin_id,
+        }
+
+    def bulk_delete_resources(
+        self,
+        resource_ids: List[str],
+        admin_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Bulk delete resources by IDs.
+        Returns a summary with deleted count and not-found IDs.
+        """
+        if not resource_ids:
+            raise ValidationError("No resource IDs provided for bulk delete")
+
+        if len(resource_ids) > 500:
+            raise ValidationError("Bulk delete limited to 500 resources per request")
+
+        result = self.repo.bulk_delete(resource_ids)
+        result["admin_id"] = admin_id
+        return result
+
+    # ------------------------------------------------------------------
+    # Verification workflow
+    # ------------------------------------------------------------------
+    def verify_resource(
+        self,
+        resource_id: str,
+        admin_id: str,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Verify a resource and log the action."""
+        return self.repo.verify_resource(resource_id, admin_id, notes)
+
+    def unverify_resource(
+        self,
+        resource_id: str,
+        admin_id: str,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Remove verification from a resource and log the action."""
+        return self.repo.unverify_resource(resource_id, admin_id, notes)
+
+    def get_verification_log(self, resource_id: str) -> List[Dict[str, Any]]:
+        """Get the verification log for a resource."""
+        return self.repo.get_verification_log(resource_id)
+
+    # ------------------------------------------------------------------
+    # Community suggestion approval
+    # ------------------------------------------------------------------
+    def get_suggestions(
+        self,
+        status: Optional[str] = None,
+        limit: int = 50,
         offset: int = 0,
-    ) -> tuple[List[Dict[str, Any]], int]:
-        """Search resources with multiple filters."""
-        items = self.repo.search(
-            skill=skill,
-            type=type,
-            difficulty=difficulty,
-            minimum_band=minimum_band,
-            maximum_band=maximum_band,
-            is_free=is_free,
-            verified=verified,
-            official=official,
-            search=search,
-            limit=limit,
-            offset=offset,
-        )
-        total = len(items)
-        return items, total
+    ) -> List[Dict[str, Any]]:
+        """Get community resource suggestions for admin review."""
+        return self.repo.get_suggestions(status=status, limit=limit, offset=offset)
 
-    def get_stats(self) -> Dict[str, Any]:
-        """Get resource catalog statistics."""
-        return self.repo.get_stats()
+    def approve_suggestion(
+        self,
+        suggestion_id: str,
+        admin_id: str,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Approve a community suggestion and create the resource."""
+        return self.repo.approve_suggestion(suggestion_id, admin_id, notes)
+
+    def reject_suggestion(
+        self,
+        suggestion_id: str,
+        admin_id: str,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Reject a community suggestion."""
+        return self.repo.reject_suggestion(suggestion_id, admin_id, notes)
+
+    # ------------------------------------------------------------------
+    # Admin analytics
+    # ------------------------------------------------------------------
+    def get_admin_analytics(self) -> Dict[str, Any]:
+        """Get analytics data for the admin dashboard."""
+        return self.repo.get_admin_analytics()
+
+    def get_resource_analytics(self, resource_id: str) -> Dict[str, Any]:
+        """Get detailed analytics for a single resource."""
+        return self.repo.get_resource_analytics(resource_id)
 
 
-resource_management_service = ResourceManagementService()
+# Singleton instance (initialized with default repo in deps)
+resource_management_service: Optional[ResourceManagementService] = None
+
+
+def get_resource_management_service(repo: ResourceRepository) -> ResourceManagementService:
+    """Factory to create a ResourceManagementService with the given repository."""
+    return ResourceManagementService(repo)

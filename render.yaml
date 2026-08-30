@@ -1,0 +1,43 @@
+# Render deployment definition for the IELTS AI Coach backend.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# This deploys ONLY the backend (FastAPI). The frontend is deployed separately
+# in a later phase and is intentionally NOT defined here.
+#
+# SECRETS: all sensitive values use `sync: false`, which means they are set
+# manually in the Render dashboard (or via `render secrets`). No real secret
+# values may ever be committed to this repository.
+
+services:
+  - type: web
+    name: ielts-ai-coach-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    # Install exact pinned production dependencies.
+    buildCommand: pip install -r requirements.txt
+    # Long-running single-worker service. The application keeps state in
+    # process (TTL cache) and runs an asyncio background loop on startup,
+    # so exactly 1 worker is REQUIRED. Do not increase this.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # --- Required secrets/config (set values in the Render dashboard) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      # Must be the exact deployed frontend origin (no wildcard, no trailing slash).
+      - key: CORS_ORIGINS
+        sync: false
+      # --- Optional (app degrades gracefully if unset) ---
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ENABLE_RESOURCE_HEALTH_BACKGROUND_CHECKS
+        value: "true"

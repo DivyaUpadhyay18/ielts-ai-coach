@@ -98,6 +98,7 @@ class UserResponse(BaseModel):
     timezone: Optional[str] = "UTC"
     module: Optional[str] = "academic"
     plan: Optional[str] = "free"
+    role: Optional[str] = "user"
     daily_minutes_budget: Optional[int] = 60
     target_band: Optional[float] = None
     current_band: Optional[float] = None

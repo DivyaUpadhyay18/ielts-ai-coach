@@ -271,3 +271,93 @@ class BandExampleListResponse(BaseModel):
     """List of band examples."""
     results: List[BandExampleResponse]
     total: int
+
+
+class SpeakingErrorIssue(BaseModel):
+    """A single speaking error/issue found in a transcript."""
+    original_phrase: str
+    issue_type: str
+    explanation: str
+    why_problem: str
+    suggested_improvement: str
+    criterion_affected: str
+    severity: str
+    context: Optional[str] = None
+
+
+class SpeakingErrorAnalysisResponse(BaseModel):
+    """Full speaking error analysis response."""
+    id: str
+    response_id: str
+    part: str
+    topic: str
+    issues: List[SpeakingErrorIssue] = Field(default_factory=list)
+    overall_band: float
+    fluency_coherence_band: float
+    lexical_resource_band: float
+    grammatical_range_band: float
+    pronunciation_band: float
+    feedback: str
+    issue_count: int
+    high_severity_count: int
+    medium_severity_count: int
+    low_severity_count: int
+    is_estimate: bool = True
+    source: str = "ai"
+    created_at: Optional[str] = None
+
+
+class SpeakingErrorAnalysisListResponse(BaseModel):
+    """List of speaking error analyses."""
+    results: List[SpeakingErrorAnalysisResponse]
+    total: int
+
+
+class SpeakingSpecificChange(BaseModel):
+    area: str
+    change: str
+    priority: str
+
+class SpeakingPracticeExercise(BaseModel):
+    title: str
+    description: str
+    skill_focus: str
+    estimated_minutes: int
+
+class SpeakingResource(BaseModel):
+    title: str
+    url: str
+    why: str
+
+class SpeakingMission(BaseModel):
+    title: str
+    skill: str = "speaking"
+    sub_skill: str = ""
+    duration_minutes: int = 15
+    description: str = ""
+
+class SpeakingImprovementPlanResponse(BaseModel):
+    id: str
+    response_id: str
+    current_band: float
+    target_band: float
+    band_gap: float
+    strongest_criterion: str
+    weakest_criterion: str
+    criterion_priorities: dict = Field(default_factory=dict)
+    current_level_description: str
+    target_level_description: str
+    specific_changes: List[SpeakingSpecificChange] = Field(default_factory=list)
+    practice_exercises: List[SpeakingPracticeExercise] = Field(default_factory=list)
+    practice_topics: List[str] = Field(default_factory=list)
+    recommended_resources: List[SpeakingResource] = Field(default_factory=list)
+    suggested_daily_minutes: int = 15
+    next_speaking_task: str
+    suggested_mission: SpeakingMission = Field(default_factory=SpeakingMission)
+    is_estimate: bool = True
+    source: str = "ai"
+    created_at: Optional[str] = None
+
+class SpeakingImprovementPlanListResponse(BaseModel):
+    results: List[SpeakingImprovementPlanResponse]
+    total: int

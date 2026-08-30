@@ -8,10 +8,13 @@ import {
   Target, 
   Zap, 
   ArrowRight, 
-  ShieldCheck,
+ShieldCheck,
   PenTool,
   Mic,
-  BrainCircuit
+BrainCircuit,
+  BookOpen,
+  Headphones,
+  SpellCheck
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -119,7 +122,7 @@ export default function DiagnosticHome() {
                 </li>
               </ul>
               
-              <Link href="/diagnostic/result">
+<Link href="/diagnostic/start">
                 <Button className="w-full h-12 text-lg shadow-lg" size="lg">
                   Begin Diagnostic <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
@@ -131,7 +134,123 @@ export default function DiagnosticHome() {
             </CardContent>
           </Card>
 
-        </div>
+</div>
+
+{/* Reading Diagnostic Module */}
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="pt-6 flex flex-col md:flex-row md:items-center gap-4 md:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-xl bg-blue-500/10 text-blue-500">
+                <BookOpen className="h-8 w-8" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">Reading Diagnostic</h3>
+                <p className="text-sm text-muted-foreground">
+                  Passage-based assessment covering all six IELTS Reading question types with
+                  instant accuracy, timing, weak-type analysis, and difficulty rating.
+                </p>
+              </div>
+            </div>
+            <Link href="/diagnostic/reading">
+              <Button variant="outline" className="shrink-0">
+                Start Reading Diagnostic <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+{/* Listening Diagnostic Module */}
+        <Card className="border-teal-500/30 bg-teal-500/5">
+          <CardContent className="pt-6 flex flex-col md:flex-row md:items-center gap-4 md:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-xl bg-teal-500/10 text-teal-500">
+                <Headphones className="h-8 w-8" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">Listening Diagnostic</h3>
+                <p className="text-sm text-muted-foreground">
+                  Audio-based assessment covering all five IELTS Listening question types with
+                  an audio player, instant accuracy, timing, and weak-section analysis.
+                </p>
+              </div>
+            </div>
+            <Link href="/diagnostic/listening">
+              <Button variant="outline" className="shrink-0">
+                Start Listening Diagnostic <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+{/* Writing Diagnostic Module */}
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="pt-6 flex flex-col md:flex-row md:items-center gap-4 md:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-xl bg-blue-500/10 text-blue-500">
+                <PenTool className="h-8 w-8" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">Writing Diagnostic</h3>
+                <p className="text-sm text-muted-foreground">
+                  Task 1 &amp; Task 2 essay practice with live word count, a timer, auto-save,
+                  manual IELTS scoring, and grammar/vocabulary placeholders.
+                </p>
+              </div>
+            </div>
+            <Link href="/diagnostic/writing">
+              <Button variant="outline" className="shrink-0">
+                Start Writing Diagnostic <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        {/* Speaking Diagnostic Module */}
+        <Card className="border-teal-500/30 bg-teal-500/5">
+          <CardContent className="pt-6 flex flex-col md:flex-row md:items-center gap-4 md:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-xl bg-teal-500/10 text-teal-500">
+                <Mic className="h-8 w-8" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">Speaking Diagnostic</h3>
+                <p className="text-sm text-muted-foreground">
+                  All three IELTS Speaking parts with microphone recording, playback, a timer,
+                  question rotation, stored recordings, and 4-criteria manual scoring.
+                </p>
+              </div>
+            </div>
+<Link href="/diagnostic/speaking">
+              <Button variant="outline" className="shrink-0">
+                Start Speaking Diagnostic <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        {/* Vocabulary & Grammar Diagnostic Module */}
+        <Card className="border-purple-500/30 bg-purple-500/5">
+          <CardContent className="pt-6 flex flex-col md:flex-row md:items-center gap-4 md:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-xl bg-purple-500/10 text-purple-500">
+                <SpellCheck className="h-8 w-8" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">Vocabulary &amp; Grammar Diagnostic</h3>
+                <p className="text-sm text-muted-foreground">
+                  Assess your vocabulary and grammar across eight topics (fill-in-the-blanks,
+                  synonyms, antonyms, sentence correction, tenses, articles, prepositions) with
+                  instant accuracy, grammar vs vocabulary breakdown, and weak-topic analysis.
+                </p>
+              </div>
+            </div>
+            <Link href="/diagnostic/vocab-grammar">
+              <Button variant="outline" className="shrink-0">
+                Start Vocabulary &amp; Grammar Diagnostic <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

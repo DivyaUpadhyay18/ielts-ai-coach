@@ -101,7 +101,7 @@ async def register(
         supabase.table("users").insert(user_profile).execute()
         
         # Generate tokens
-        access_token, refresh_token = create_tokens(user_id, user_data.email)
+        access_token, refresh_token = create_tokens(user_id, user_data.email, role="user")
         
         # Store refresh token
         supabase.table("refresh_tokens").insert({
@@ -175,7 +175,8 @@ async def login(
             )
         
         # Generate tokens
-        access_token, refresh_token = create_tokens(user["id"], user["email"])
+        role = user.get("role", "user")
+        access_token, refresh_token = create_tokens(user["id"], user["email"], role=role)
         
         # Store refresh token
         now = datetime.now(timezone.utc).isoformat()
@@ -249,8 +250,12 @@ async def refresh_token(
                 detail="Refresh token has been revoked",
             )
         
+        # Fetch user role for token generation
+        user_result = supabase.table("users").select("role").eq("id", user_id).single().execute()
+        role = user_result.data.get("role", "user") if user_result.data else "user"
+
         # Generate new tokens
-        access_token, new_refresh_token = create_tokens(user_id, email)
+        access_token, new_refresh_token = create_tokens(user_id, email, role=role)
         
         # Store new refresh token
         now = datetime.now(timezone.utc).isoformat()

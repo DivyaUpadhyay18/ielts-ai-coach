@@ -24,6 +24,7 @@ from app.core.exceptions import ValidationError
 from app.db.session import DatabaseSession
 from app.models.study_plan import StudyPlanCreate
 from app.models.study_plan_engine import (
+    DiagnosticStudyPlanRequest,
     GeneratedDay,
     GeneratedTask,
     PhaseBreakdown,
@@ -37,6 +38,7 @@ from app.repositories.study_plan_repo import StudyPlanRepository
 from app.repositories.task_repo import TaskRepository
 from app.repositories.user_repo import UserRepository
 from app.services.schedule_history_service import schedule_history_service
+from app.services.diagnostic_roadmap_service import diagnostic_roadmap_service
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -781,6 +783,88 @@ class StudyPlanGenerator:
         if self.db is None:
             return None
         return self.study_plan_repo.get_active(user_id)
+
+    # ------------------------------------------------------------------
+    # Diagnostic-first generation (personalized roadmap)
+    # ------------------------------------------------------------------
+    def generate_from_diagnostic(
+        self, user_id: str, request: DiagnosticStudyPlanRequest
+    ) -> Dict[str, Any]:
+        """
+        Generate a personalized study plan (roadmap) seeded from the **latest
+        diagnostic results** instead of manual assumptions.
+
+        The Diagnostic Roadmap Service resolves the user's measured current band
+        and weakest/strongest skills from their latest completed diagnostic;
+        those signals drive every decision in :meth:`generate` (skill priority,
+        task emphasis, phase focus). Client values (exam date, minutes budget,
+        module, optional target band) are honored as overrides.
+
+        Raises ValidationError if the user has neither diagnostic results nor a
+        usable profile fallback.
+        """
+        profile = diagnostic_roadmap_service.resolve_profile(
+            user_id, explicit_target=request.target_band
+        )
+
+        exam_date = request.exam_date
+        if exam_date is None:
+            raw = profile.get("profile_exam_date")
+            if raw:
+                try:
+                    exam_date = raw if isinstance(raw, date) else date.fromisoformat(str(raw)[:10])
+                except (ValueError, TypeError):
+                    exam_date = None
+        if exam_date is None or exam_date <= date.today():
+            raise ValidationError(
+                "exam_date is required to generate a roadmap (set it on your profile or in the request)."
+            )
+
+        current_band = float(profile.get("current_band") or 5.0)
+        target_band = float(profile.get("target_band") or min(9.0, current_band + 1.0))
+        target_band = max(target_band, current_band)  # target >= current
+
+        weak = profile.get("weakest_skills") or []
+        strong = profile.get("strongest_skills") or []
+
+        if not profile.get("has_diagnostic") and not weak and not strong:
+            raise ValidationError(
+                "Complete the Diagnostic Test first, or set weakest/strongest skills in your profile."
+            )
+
+        plan_request = StudyPlanGenerateRequest(
+            exam_date=exam_date,
+            current_band=current_band,
+            target_band=target_band,
+            daily_minutes_budget=request.daily_minutes_budget,
+            module=request.module,
+            weakest_skills=weak,
+            strongest_skills=strong,
+            start_date=request.start_date,
+        )
+
+        result = self.generate(user_id, plan_request)
+        self._tag_plan_source(user_id, result, profile)
+        return result
+
+    def _tag_plan_source(
+        self, user_id: str, generated: Dict[str, Any], profile: Dict[str, Any]
+    ) -> None:
+        """Stamp the generated plan with its diagnostic source (best-effort)."""
+        if self.db is None:
+            return
+        plan_id = generated.get("study_plan_id")
+        if not plan_id:
+            return
+        try:
+            plan = self.study_plan_repo.get_by_id(plan_id, user_id=user_id)
+            meta = dict(plan.get("meta") or {})
+            meta["source"] = profile.get("source", "unknown")
+            meta["diagnostic_attempt_id"] = profile.get("attempt_id")
+            meta["skill_bands"] = profile.get("skill_bands")
+            self.study_plan_repo.update(plan_id, {"meta": meta}, user_id)
+        except Exception:
+            return
 
 
 # Singleton instance bound to the shared DB session.

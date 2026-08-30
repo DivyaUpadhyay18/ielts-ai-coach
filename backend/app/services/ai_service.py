@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from httpx import AsyncClient
 
@@ -12,6 +12,11 @@ from app.ai.prompts import (
     IELTS_WRITING_ERROR_ANALYSIS_PROMPT,
     IELTS_IMPROVEMENT_PLAN_PROMPT,
     IELTS_BAND_EXAMPLES_PROMPT,
+    IELTS_WRITING_COACH_PROMPT,
+    IELTS_SPEAKING_ERROR_ANALYSIS_PROMPT,
+    IELTS_SPEAKING_IMPROVEMENT_PLAN_PROMPT,
+    IELTS_SPEAKING_REATTEMPT_COMPARISON_PROMPT,
+    IELTS_SPEAKING_COACH_PROMPT,
 )
 
 logger = logging.getLogger(__name__)
@@ -520,6 +525,714 @@ def _fallback_band_examples(context: Dict[str, Any]) -> Dict[str, Any]:
         "example_conclusion": conclusion,
         "sample_answer": None,
         "is_sample_answer": False,
+    }
+
+
+# ─── Speaking Error Analysis helpers (module-level) ────────────────────
+
+# Filler word / hesitation patterns to detect in transcripts.
+_FILLER_PATTERNS = [
+    (r"\bum\b", "um"),
+    (r"\buh\b", "uh"),
+    (r"\ber\b", "er"),
+    (r"\byou know\b", "you know"),
+    (r"\blike\b", "like —"),  # contextual — only if used as filler
+    (r"\bi mean\b", "i mean"),
+    (r"\bi think\b", "i think"),
+]
+
+# Common misspellings that hint at pronunciation issues.
+_PRONUNCIATION_MARKERS = {
+    "dis": "this",
+    "des": "these",
+    "dem": "them",
+    "libary": "library",
+    "teh": "the",
+}
+
+# Allowed issue types for Speaking error analysis.
+_SPEAKING_ISSUE_TYPES = {
+    "Grammar", "Repeated Vocabulary", "Weak Vocabulary",
+    "Unnatural Expression", "Filler Words", "Repetition",
+    "Incomplete Sentence", "Hesitation Indicator",
+    "Coherence Problem", "Pronunciation",
+}
+
+
+def _build_speaking_errors_prompt(context: Dict[str, Any]) -> str:
+    """Build the user message for the speaking-error-analysis call."""
+    part = context.get("part", "part_1")
+    topic = context.get("topic", "")
+    word_count = context.get("word_count", 0)
+    transcript = context.get("transcript", "")
+    return (
+        f"Analyze the following IELTS Speaking transcript.\n\n"
+        f"Part: {part}\n"
+        f"Topic: {topic}\n"
+        f"Estimated word count: {word_count}\n\n"
+        f"Transcript:\n{transcript}\n\n"
+        f"Follow the instructions in your system prompt exactly."
+    )
+
+
+def _normalize_speaking_error_analysis(
+    result: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Validate and shape the AI speaking-error-analysis response."""
+    def _coerce_issues(raw: Any) -> List[Dict[str, Any]]:
+        if not isinstance(raw, list):
+            return []
+        valid = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            issue_type = item.get("issue_type", "")
+            if issue_type not in _SPEAKING_ISSUE_TYPES:
+                continue
+            severity = item.get("severity", "minor")
+            if severity not in ("critical", "major", "minor"):
+                severity = "minor"
+            criterion = item.get("criterion_affected", "fluency_coherence")
+            if criterion not in (
+                "fluency_coherence", "lexical_resource",
+                "grammatical_range", "pronunciation",
+            ):
+                criterion = "fluency_coherence"
+            valid.append({
+                "original_phrase": str(item.get("original_phrase", "") or "")[:300],
+                "issue_type": issue_type,
+                "explanation": str(item.get("explanation", "") or "")[:400],
+                "why_problem": str(item.get("why_problem", "") or "")[:400],
+                "suggested_improvement": str(
+                    item.get("suggested_improvement", "") or ""
+                )[:500],
+                "criterion_affected": criterion,
+                "severity": severity,
+                "context": str(item.get("context", "") or "")[:100],
+            })
+        return valid[:15]
+
+    return {
+        "issues": _coerce_issues(result.get("issues", [])),
+        "overall_band": float(result.get("overall_band", 6.0)),
+        "fluency_coherence_band": float(result.get("fluency_coherence_band", 6.0)),
+        "lexical_resource_band": float(result.get("lexical_resource_band", 6.0)),
+        "grammatical_range_band": float(result.get("grammatical_range_band", 6.0)),
+        "pronunciation_band": float(result.get("pronunciation_band", 6.0)),
+        "feedback": str(result.get("feedback", "") or "")[:800],
+        "is_estimate": bool(result.get("is_estimate", True)),
+    }
+
+
+def _fallback_speaking_error_analysis(
+    context: Dict[str, Any], transcript: str
+) -> Dict[str, Any]:
+    """Deterministic fallback for speaking error analysis."""
+    issues: List[Dict[str, Any]] = []
+    text = transcript or ""
+    lowered = text.lower()
+
+    # 1. Filler words (from patterns)
+    for pattern, label in _FILLER_PATTERNS:
+        matches = re.findall(pattern, lowered)
+        if matches:
+            count = len(matches)
+            issues.append({
+                "original_phrase": label,
+                "issue_type": "Filler Words",
+                "explanation": f"You used the filler '{label}' {count} time(s) in your response.",
+                "why_problem": "Filler words can interrupt the natural flow of your speech and affect how smoothly ideas connect.",
+                "suggested_improvement": f"Try pausing briefly instead of saying '{label}'. Practice answering sample questions without fillers, aiming to link your points with cohesive words like 'additionally', 'however', or 'on the other hand'.",
+                "criterion_affected": "fluency_coherence",
+                "severity": "minor" if count <= 2 else "major",
+                "context": "throughout transcript",
+            })
+
+    # 2. Repeated vocabulary — find words used 3+ times
+    word_freq: Dict[str, int] = {}
+    for w in re.findall(r"[A-Za-z']+", lowered):
+        wl = w.lower()
+        if len(wl) > 3 and wl not in ("that", "this", "with", "have", "they"):
+            word_freq[wl] = word_freq.get(wl, 0) + 1
+
+    for word, count in sorted(word_freq.items(), key=lambda x: -x[1]):
+        if count >= 3:
+            issues.append({
+                "original_phrase": word,
+                "issue_type": "Repeated Vocabulary",
+                "explanation": f"You used '{word}' {count} times. Repeating the same word can make your vocabulary seem limited.",
+                "why_problem": "Using the same word repeatedly suggests a narrower vocabulary range, which may affect your Lexical Resource band.",
+                "suggested_improvement": f"Try paraphrasing: think of synonyms before you speak. For '{word}', consider alternatives like '{word} in addition', or rephrase the sentence entirely.",
+                "criterion_affected": "lexical_resource",
+                "severity": "major" if count >= 5 else "minor",
+                "context": "throughout transcript",
+            })
+        if len(issues) >= 4:
+            break
+
+    # 3. Incomplete sentences — look for trailing conjunctions / fragments
+    stripped = text.strip().lower()
+    trailing_incomplete = (
+        stripped.endswith((" and", " but", " or", " so", " because",
+                          " to", " of", " with", " for", " in", " on",
+                          " about", " because", " although", " while", " if",
+                          " however", " therefore", " nevertheless",
+                          " that", " which", " who", " what", " how", " why"))
+        or stripped.endswith(",")
+        or stripped.endswith(" —")
+    )
+    if stripped and trailing_incomplete:
+        issues.append({
+            "original_phrase": "sentence trails off / ends incomplete",
+            "issue_type": "Incomplete Sentence",
+            "explanation": "Your response ends without completing the sentence structure.",
+            "why_problem": "Incomplete sentences can make your speech difficult to follow and affect your Grammatical Range score.",
+            "suggested_improvement": "Always finish your thought before stopping. If you start a sentence, complete it. Practice counting to 2 silently to collect your full thought before speaking.",
+            "criterion_affected": "grammatical_range",
+            "severity": "major",
+            "context": "end of transcript",
+        })
+
+    # 4. Self-correction / hesitation indicators
+    if re.search(r"\b(i (mean|think|guess|say|believe) (that|uh|um)?)", lowered):
+        issues.append({
+            "original_phrase": "i think / i mean / i guess",
+            "issue_type": "Hesitation Indicator",
+            "explanation": "You used a self-correction phrase like 'I think' or 'I mean', which signals hesitation.",
+            "why_problem": "Multiple hesitation markers can make your speech sound uncertain and reduce your Fluency score.",
+            "suggested_improvement": "Instead of 'I think...', commit to your answer directly. If you're unsure, you can say 'One perspective is...' or 'I would say that...'.",
+            "criterion_affected": "fluency_coherence",
+            "severity": "minor",
+            "context": "throughout transcript",
+        })
+
+    # 5. Weak vocabulary — "very" + adjective
+    if re.search(r"\bvery\s+\w+", lowered):
+        issues.append({
+            "original_phrase": "very + adjective",
+            "issue_type": "Weak Vocabulary",
+            "explanation": "You relied on 'very' to intensify adjectives.",
+            "why_problem": "'Very' is a basic intensifier that doesn't showcase sophisticated vocabulary, which is needed for a high Lexical Resource band.",
+            "suggested_improvement": "Replace 'very' with precise alternatives: 'extremely', 'particularly', 'significantly', 'remarkably', or phrase it differently (e.g. 'to a great extent').",
+            "criterion_affected": "lexical_resource",
+            "severity": "minor",
+            "context": "throughout transcript",
+        })
+
+    # 6. Pronunciation indicators (only from transcript misspellings)
+    for marker, correct in _PRONUNCIATION_MARKERS.items():
+        if marker in lowered:
+            issues.append({
+                "original_phrase": marker,
+                "issue_type": "Pronunciation",
+                "explanation": f"You wrote/spelled '{marker}' where '{correct}' is expected, which may indicate a pronunciation challenge.",
+                "why_problem": "Consistent misspellings of /θ/ vs /t/ or /s/ vs /θ/ sounds can affect your Pronunciation band.",
+                "suggested_improvement": f"Practice the /θ/ sound (theta) — place your tongue between your teeth. Use minimal pairs: 'think/thank', 'thin/then'.",
+                "criterion_affected": "pronunciation",
+                "severity": "minor",
+                "context": "transcript shows possible pronunciation marker",
+            })
+
+    # 7. Coherence — check for linking word variety (only for longer responses)
+    linkers = ["and", "but", "so", "because", "however", "therefore",
+               "additionally", "furthermore", "meanwhile", "in addition",
+               "on the other hand", "as a result", "consequently"]
+    used_linkers = [w for w in linkers if re.search(rf"\b{w}\b", lowered)]
+    if len(used_linkers) <= 1 and len(text) > 150:
+        issues.append({
+            "original_phrase": "limited linking words",
+            "issue_type": "Coherence Problem",
+            "explanation": "Your response uses mostly simple linking words without variety.",
+            "why_problem": "Limited use of cohesive devices can make your speech sound disconnected, affecting your Fluency and Coherence score.",
+            "suggested_improvement": "Expand your range of linkers: 'furthermore', 'in addition', 'on the other hand', 'as a result', 'consequently'. Use them naturally between ideas.",
+            "criterion_affected": "fluency_coherence",
+            "severity": "major",
+            "context": "throughout transcript",
+        })
+
+    # Aggregate stats
+    severity_counts = {"critical": 0, "major": 0, "minor": 0}
+    for issue in issues:
+        sev = issue.get("severity", "minor")
+        severity_counts[sev] = severity_counts.get(sev, 0) + 1
+
+    high = severity_counts["critical"] + severity_counts["major"]
+    overall = max(5.0, min(9.0, round(6.5 - high * 0.25 * 2) / 2)) if issues else 6.5
+
+    bands = {
+        "fluency_coherence": overall,
+        "lexical_resource": max(5.0, min(9.0, overall - 0.5)) if len(issues) > 2 else overall,
+        "grammatical_range": max(5.0, min(9.0, overall - 0.5)) if issues else overall,
+        "pronunciation": overall,
+    }
+
+    feedback = (
+        "You communicated your ideas clearly — that's a great foundation. "
+    )
+    if issues:
+        feedback += (
+            f"I noticed {len(issues)} area(s) where you could refine your speaking. "
+            "Each suggestion below is designed to help you sound more natural and confident. "
+            "Keep practicing — these improvements will come with regular speaking practice!"
+        )
+    else:
+        feedback += "Your response was strong across all criteria. Keep up the great work!"
+
+    return {
+        "issues": issues,
+        "overall_band": overall,
+        "fluency_coherence_band": bands["fluency_coherence"],
+        "lexical_resource_band": bands["lexical_resource"],
+        "grammatical_range_band": bands["grammatical_range"],
+        "pronunciation_band": bands["pronunciation"],
+        "feedback": feedback,
+        "issue_count": len(issues),
+        "high_severity_count": severity_counts["critical"] + severity_counts["major"],
+        "medium_severity_count": 0,
+        "low_severity_count": severity_counts["minor"],
+        "is_estimate": True,
+    }
+
+
+# ─── Speaking Improvement Plan helpers (module-level) ─────────────────
+
+_SPEAKING_CRITERIA = [
+    "fluency_coherence", "lexical_resource", "grammatical_range", "pronunciation",
+]
+_CRITERION_LABEL = {
+    "fluency_coherence": "Fluency & Coherence",
+    "lexical_resource": "Lexical Resource",
+    "grammatical_range": "Grammatical Range",
+    "pronunciation": "Pronunciation",
+}
+
+# Resource + topic pools keyed by criterion.
+_SPEAKING_RESOURCES = {
+    "fluency_coherence": [
+        ("IELTS Liz — Linking Words", "https://ieltsliz.com/linking-words/",
+         "Helps you expand your range of cohesive devices."),
+        ("TED Talks — Fluent Speaking", "https://ted.com/talks",
+         "Listen and shadow fluent speakers to improve your rhythm."),
+        ("BBC Learning English — 6 Minute English", "https://www.bbc.co.uk/learningenglish",
+         "Regular listening + repeat practice for natural flow."),
+    ],
+    "lexical_resource": [
+        ("IELTS Simon — Topic Vocabulary", "https://ieltssimon.com",
+         "Daily vocabulary lists organised by topic."),
+        ("Vocabulary for IELTS — Collocations", "https://vocabulary.ielts.com",
+         "Learn natural word pairings to sound more fluent."),
+        ("Oxford Learner's Dictionary", "https://www.oxfordlearnersdictionaries.com",
+         "Find precise, natural-sounding alternatives to basic words."),
+    ],
+    "grammatical_range": [
+        ("IELTS Liz — Grammar Tips", "https://ieltsliz.com/grammar-tips/",
+         "Targeted grammar practice for complex sentence structures."),
+        ("Perfect English Grammar", "https://www.perfect-english-grammar.com",
+         "Practice advanced tenses and conditional forms."),
+        ("English Page — Grammar", "https://www.englishpage.com",
+         "Exercises on relative clauses, passive voice, and inversion."),
+    ],
+    "pronunciation": [
+        ("IELTS Speaking — Pronunciation Tips", "https://ielts.org",
+         "Official guidance on sound production and word stress."),
+        ("Rachel's English", "https://rachelsenglish.com",
+         "American English pronunciation with minimal pairs."),
+        ("BBC Learning — Pronunciation", "https://www.bbc.co.uk/learningenglish",
+         "Listen and repeat to improve clarity and stress patterns."),
+    ],
+}
+_SPEAKING_TOPICS = [
+    "Your hometown and what makes it special",
+    "A person who has influenced your career",
+    "Describe a memorable journey you took",
+    "An article about education that caught your attention",
+    "A traditional meal that is important to you",
+    "A book that changed your perspective",
+    "Describe a skill you would like to learn",
+    "An important decision you made recently",
+    "A place you would recommend to visitors",
+    "A challenge you overcame in your studies",
+    "Describe a film you would recommend",
+    "An invention that has impacted society",
+    "A hobby that helps you relax",
+    "A teacher who inspired you",
+    "Describe an event you organised",
+]
+
+
+def _rank_speaking_weaknesses(
+    criteria_bands: Dict[str, Any],
+) -> tuple[Optional[str], Optional[str]]:
+    """Return (strongest_criterion, weakest_criterion) from band values."""
+    valid = {}
+    for key in _SPEAKING_CRITERIA:
+        val = criteria_bands.get(key)
+        try:
+            valid[key] = float(val)
+        except (TypeError, ValueError):
+            continue
+    if not valid:
+        return None, None
+    strongest = max(valid, key=valid.get)
+    weakest = min(valid, key=valid.get)
+    return strongest, weakest
+
+
+def _build_speaking_plan_prompt(context: Dict[str, Any]) -> str:
+    """Build the user message for the speaking-improvement-plan call."""
+    return (
+        f"Generate a personalized IELTS Speaking improvement plan.\n\n"
+        f"Current band: {context['current_band']}\n"
+        f"Target band: {context['target_band']}\n"
+        f"Band gap: {context['band_gap']}\n"
+        f"Strengths and weaknesses per criterion:\n"
+        f"  Fluency & Coherence: {context['fluency_coherence_band']}\n"
+        f"  Lexical Resource: {context['lexical_resource_band']}\n"
+        f"  Grammatical Range: {context['grammatical_range_band']}\n"
+        f"  Pronunciation: {context['pronunciation_band']}\n"
+        f"Strongest criterion: {context['strongest_criterion']}\n"
+        f"Weakest criterion: {context['weakest_criterion']}\n"
+        f"Error issues: {context.get('issues_summary', 'N/A')}\n"
+        f"Part: {context['part']}\n"
+        f"Topic: {context['topic']}\n\n"
+        f"Transcript:\n{context['transcript']}\n\n"
+        f"Follow the instructions in your system prompt exactly."
+    )
+
+
+def _normalize_speaking_improvement_plan(
+    result: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Validate and shape the AI speaking improvement-plan response."""
+    def _coerce_list(key, max_items=10):
+        raw = result.get(key, [])
+        if not isinstance(raw, list):
+            return []
+        return [r for r in raw if isinstance(r, (dict, str))][:max_items]
+
+    priorities = result.get("criterion_priorities", {})
+    if not isinstance(priorities, dict):
+        priorities = {}
+
+    return {
+        "current_band": float(result.get("current_band", 0.0)),
+        "target_band": float(result.get("target_band", 0.0)),
+        "band_gap": float(result.get("band_gap", 0.0)),
+        "strongest_criterion": str(result.get("strongest_criterion", "") or ""),
+        "weakest_criterion": str(result.get("weakest_criterion", "") or ""),
+        "criterion_priorities": priorities,
+        "current_level_description": str(result.get("current_level_description", "") or "")[:500],
+        "target_level_description": str(result.get("target_level_description", "") or "")[:500],
+        "specific_changes": _coerce_list("specific_changes", 10),
+        "practice_exercises": _coerce_list("practice_exercises", 10),
+        "practice_topics": _coerce_list("practice_topics", 15),
+        "recommended_resources": _coerce_list("recommended_resources", 12),
+        "suggested_daily_minutes": int(result.get("suggested_daily_minutes", 15)),
+        "next_speaking_task": str(result.get("next_speaking_task", "") or "")[:300],
+        "suggested_mission": result.get("suggested_mission", {}) if isinstance(result.get("suggested_mission"), dict) else {},
+        "is_estimate": bool(result.get("is_estimate", True)),
+    }
+
+
+def _fallback_speaking_improvement_plan(
+    context: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Deterministic fallback: produce a plan from bands + issues alone."""
+    current_band = context.get("current_band", 6.0)
+    target_band = context.get("target_band", round(current_band + 1.0, 1))
+    target_band = min(max(target_band, 1.0), 9.0)
+    band_gap = round(target_band - current_band, 1)
+
+    strongest = context.get("strongest_criterion") or "fluency_coherence"
+    weakest = context.get("weakest_criterion") or "lexical_resource"
+
+    bands = {
+        "fluency_coherence": context.get("fluency_coherence_band", current_band),
+        "lexical_resource": context.get("lexical_resource_band", current_band),
+        "grammatical_range": context.get("grammatical_range_band", current_band),
+        "pronunciation": context.get("pronunciation_band", current_band),
+    }
+
+    def _priority(criterion: str) -> str:
+        if criterion == weakest:
+            return "high"
+        if criterion == strongest:
+            return "low"
+        band_val = float(bands.get(criterion, current_band))
+        return "high" if band_val < (current_band + 0.5) else "medium"
+
+    criterion_priorities = {k: _priority(k) for k in _SPEAKING_CRITERIA}
+
+    # Build changes — always include one per criterion, with weakest first
+    priority_order = sorted(_SPEAKING_CRITERIA, key=lambda c: (criterion_priorities[c] != "high", c))
+    specific_changes = []
+    for c in priority_order:
+        specific_changes.append({
+            "area": _CRITERION_LABEL.get(c, c),
+            "change": _FALLBACK_CHANGE.get(c, "Work on this area through targeted practice."),
+            "priority": criterion_priorities[c],
+        })
+
+    # Scale resources/exercises by gap
+    if band_gap <= 1.0:
+        n_exercises = 2
+        n_resources = 3
+        n_topics = 5
+        daily_minutes = 15
+    elif band_gap <= 2.5:
+        n_exercises = 4
+        n_resources = 5
+        n_topics = 8
+        daily_minutes = 20
+    else:
+        n_exercises = 5
+        n_resources = 7
+        n_topics = 10
+        daily_minutes = 30
+
+    # Collect resources from weakest criteria
+    recs = []
+    for c in priority_order[:3]:
+        for rec in _SPEAKING_RESOURCES.get(c, []):
+            recs.append({"title": rec[0], "url": rec[1], "why": rec[2]})
+    recommended_resources = recs[:6]
+
+    # Exercises
+    practice_exercises = [
+        {"title": "Timed Part 1 Practice",
+         "description": f"Record yourself answering 5 Part 1 questions in {n_exercises * 2} minutes, then listen back and count fillers.",
+         "skill_focus": "fluency", "estimated_minutes": n_exercises * 2},
+        {"title": "Vocabulary Expansion",
+         "description": "Write 10 synonyms for common IELTS topics, then use each in a sentence.",
+         "skill_focus": "vocabulary", "estimated_minutes": n_exercises * 3},
+    ]
+
+    # Topics
+    import random
+    rng = random.Random(hash(str(context)))
+    shuffled_topics = _SPEAKING_TOPICS[:]
+    rng.shuffle(shuffled_topics)
+    practice_topics = shuffled_topics[:n_topics]
+
+    # Daily minutes
+    if band_gap <= 1.0:
+        daily_minutes = 15
+    elif band_gap <= 2.5:
+        daily_minutes = 20
+    else:
+        daily_minutes = 30
+
+    feedback = (_FALLBACK_CURRENT_DESC.format(
+        current_band=current_band, weakest=weakest, strongest=strongest
+    ))
+    target_desc = (_FALLBACK_TARGET_DESC.format(target_band=target_band))
+
+    return {
+        "current_band": float(current_band),
+        "target_band": float(target_band),
+        "band_gap": float(band_gap),
+        "strongest_criterion": strongest,
+        "weakest_criterion": weakest,
+        "criterion_priorities": criterion_priorities,
+        "current_level_description": feedback,
+        "target_level_description": target_desc,
+        "specific_changes": specific_changes,
+        "practice_exercises": practice_exercises,
+        "practice_topics": practice_topics,
+        "recommended_resources": recommended_resources,
+        "suggested_daily_minutes": daily_minutes,
+        "next_speaking_task": _FALLBACK_NEXT_TASK.format(weakest=_CRITERION_LABEL.get(weakest, weakest)),
+        "suggested_mission": {
+            "title": f"Speaking { _CRITERION_LABEL.get(weakest, weakest)} Improvement",
+            "skill": "speaking",
+            "sub_skill": weakest,
+            "duration_minutes": daily_minutes,
+            "description": f"Focus on improving { _CRITERION_LABEL.get(weakest, weakest)} through targeted exercises.",
+        },
+        "is_estimate": True,
+    }
+
+
+_FALLBACK_CURRENT_DESC = (
+    "You are currently at Band {current_band}. "
+    "Your strongest area is {strongest}, but your weakest area is {weakest}. "
+    "Focus on targeted improvement in your weakest criterion."
+)
+_FALLBACK_TARGET_DESC = (
+    "A Band {target_band} Speaking response demonstrates consistent fluency, "
+    "a wide range of vocabulary, sophisticated grammar, and clear pronunciation. "
+    "You need to reduce errors and use more natural language."
+)
+_FALLBACK_NEXT_TASK = (
+    "Record a 1-2 minute response to a Part 2 cue card, then listen back and "
+    "note every instance of {weakest} issues. Practice replacing them with "
+    "stronger alternatives."
+)
+
+_FALLBACK_CHANGE = {
+    "fluency_coherence": "Slow down your speech and practice pausing at natural breaks instead of using fillers. Use linking words like 'furthermore', 'however', and 'as a result' between ideas.",
+    "lexical_resource": "Build topic-specific word lists and practice using synonyms. Replace 'very' + adjective with precise alternatives like 'extremely', 'particularly', or 'significantly'.",
+    "grammatical_range": "Practice complex sentence structures: conditionals, relative clauses, and passive voice. Record yourself using 3-4 different structures per response.",
+    "pronunciation": "Practice minimal pairs (think/sink, ship/sheep) and word stress. Record yourself and compare with native speaker models.",
+}
+
+
+# ─── Speaking Reattempt Comparison helpers (module-level) ───────────────
+
+_SPEAKING_CRITERIA_KEYS = (
+    "fluency_coherence",
+    "lexical_resource",
+    "grammatical_range",
+    "pronunciation",
+)
+_SPEAKING_CRITERION_LABELS = {
+    "fluency_coherence": "Fluency and Coherence",
+    "lexical_resource": "Lexical Resource",
+    "grammatical_range": "Grammatical Range",
+    "pronunciation": "Pronunciation",
+}
+
+
+def _build_reattempt_comparison_context(
+    attempt_1: Dict[str, Any], attempt_2: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Build the context dict for the reattempt comparison prompt."""
+    return {
+        "attempt_1_overall": attempt_1.get("overall_band", 0.0),
+        "attempt_2_overall": attempt_2.get("overall_band", 0.0),
+        "attempt_1_fluency": attempt_1.get("fluency_coherence_band", 0.0),
+        "attempt_2_fluency": attempt_2.get("fluency_coherence_band", 0.0),
+        "attempt_1_lexical": attempt_1.get("lexical_resource_band", 0.0),
+        "attempt_2_lexical": attempt_2.get("lexical_resource_band", 0.0),
+        "attempt_1_grammar": attempt_1.get("grammatical_range_band", 0.0),
+        "attempt_2_grammar": attempt_2.get("grammatical_range_band", 0.0),
+        "attempt_1_pronunciation": attempt_1.get("pronunciation_band", 0.0),
+        "attempt_2_pronunciation": attempt_2.get("pronunciation_band", 0.0),
+        "attempt_1_duration": attempt_1.get("duration_seconds", 0),
+        "attempt_2_duration": attempt_2.get("duration_seconds", 0),
+        "attempt_1_fillers": attempt_1.get("filler_words_count", 0),
+        "attempt_2_fillers": attempt_2.get("filler_words_count", 0),
+        "attempt_1_errors": attempt_1.get("error_count", 0),
+        "attempt_2_errors": attempt_2.get("error_count", 0),
+    }
+
+
+def _normalize_reattempt_comparison(
+    result: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Validate and shape the AI reattempt-comparison response."""
+    def _coerce_list(key: str, max_items: int = 8) -> List[str]:
+        raw = result.get(key, [])
+        if not isinstance(raw, list):
+            return []
+        return [str(item) for item in raw][:max_items]
+
+    return {
+        "what_improved": _coerce_list("what_improved", 8),
+        "what_stayed_the_same": _coerce_list("what_stayed_the_same", 8),
+        "what_became_worse": _coerce_list("what_became_worse", 8),
+        "focus_next": _coerce_list("focus_next", 5),
+        "feedback": str(result.get("feedback", "") or "")[:800],
+    }
+
+
+def _fallback_reattempt_comparison(context: Dict[str, Any]) -> Dict[str, Any]:
+    """Deterministic fallback for reattempt comparison."""
+    a1 = {
+        "overall": context["attempt_1_overall"],
+        "fluency": context["attempt_1_fluency"],
+        "lexical": context["attempt_1_lexical"],
+        "grammar": context["attempt_1_grammar"],
+        "pronunciation": context["attempt_1_pronunciation"],
+        "duration": context["attempt_1_duration"],
+        "fillers": context["attempt_1_fillers"],
+        "errors": context["attempt_1_errors"],
+    }
+    a2 = {
+        "overall": context["attempt_2_overall"],
+        "fluency": context["attempt_2_fluency"],
+        "lexical": context["attempt_2_lexical"],
+        "grammar": context["attempt_2_grammar"],
+        "pronunciation": context["attempt_2_pronunciation"],
+        "duration": context["attempt_2_duration"],
+        "fillers": context["attempt_2_fillers"],
+        "errors": context["attempt_2_errors"],
+    }
+
+    improved = []
+    unchanged = []
+    worsened = []
+    focus = []
+
+    for key, label in zip(
+        ("fluency", "lexical", "grammar", "pronunciation"),
+        (_SPEAKING_CRITERION_LABELS["fluency_coherence"],
+         _SPEAKING_CRITERION_LABELS["lexical_resource"],
+         _SPEAKING_CRITERION_LABELS["grammatical_range"],
+         _SPEAKING_CRITERION_LABELS["pronunciation"]),
+    ):
+        d = round(a2[key] - a1[key], 1)
+        if d > 0:
+            improved.append(f"{label} improved by {d:.1f} band(s) ({a1[key]:.1f} → {a2[key]:.1f}).")
+        elif d < 0:
+            worsened.append(f"{label} decreased by {abs(d):.1f} band(s) ({a1[key]:.1f} → {a2[key]:.1f}).")
+            focus.append(label)
+        else:
+            unchanged.append(f"{label} stayed the same ({a1[key]:.1f}).")
+
+    overall_d = round(a2["overall"] - a1["overall"], 1)
+    if overall_d > 0:
+        improved.append(f"Overall band improved by {overall_d:.1f} ({a1['overall']:.1f} → {a2['overall']:.1f}).")
+    elif overall_d < 0:
+        worsened.append(f"Overall band decreased by {abs(overall_d):.1f} ({a1['overall']:.1f} → {a2['overall']:.1f}).")
+        focus.append("Overall band")
+    else:
+        unchanged.append(f"Overall band stayed at {a1['overall']:.1f}.")
+
+    # Duration
+    dur_d = a2["duration"] - a1["duration"]
+    if dur_d != 0:
+        direction = "increased" if dur_d > 0 else "decreased"
+        improved.append(f"Duration {direction} by {abs(dur_d)} seconds.")
+    else:
+        unchanged.append(f"Duration stayed at {a1['duration']} seconds.")
+
+    # Fillers
+    filler_d = a2["fillers"] - a1["fillers"]
+    if filler_d < 0:
+        improved.append(f"Filler words decreased by {abs(filler_d)} ({a1['fillers']} → {a2['fillers']}).")
+    elif filler_d > 0:
+        worsened.append(f"Filler words increased by {filler_d} ({a1['fillers']} → {a2['fillers']}).")
+        focus.append("Reducing filler words")
+    else:
+        unchanged.append(f"Filler words stayed at {a1['fillers']}.")
+
+    # Errors
+    err_d = a2["errors"] - a1["errors"]
+    if err_d < 0:
+        improved.append(f"Error count decreased by {abs(err_d)} ({a1['errors']} → {a2['errors']}).")
+    elif err_d > 0:
+        worsened.append(f"Error count increased by {err_d} ({a1['errors']} → {a2['errors']}).")
+        focus.append("Error reduction")
+
+    if not focus:
+        focus = ["Maintain your strengths and continue practicing"]
+
+    feedback = (
+        f"You completed another Speaking attempt — that's excellent progress! "
+    )
+    if improved:
+        feedback += f"I can see {len(improved)} area(s) of improvement. "
+    if worsened:
+        feedback += "A few areas need attention, but every reattempt builds your skills. "
+    feedback += "Keep recording and reflecting — you're on the right track!"
+
+    return {
+        "what_improved": improved,
+        "what_stayed_the_same": unchanged,
+        "what_became_worse": worsened,
+        "focus_next": focus[:3],
+        "feedback": feedback,
     }
 
 
@@ -1169,6 +1882,195 @@ class AIService:
         result["source"] = "deterministic_fallback"
         return result
 
+ 
+    async def analyze_speaking_errors(
+        self,
+        transcript: str,
+        part: str = "part_1",
+        topic: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Analyse a Speaking transcript for specific issues:
+
+        - Grammar errors
+        - Repeated / weak vocabulary
+        - Unnatural expressions
+        - Filler words
+        - Repetition
+        - Incomplete sentences
+        - Hesitation indicators
+        - Coherence problems
+        - Pronunciation issues (only when supported by audio analysis)
+
+        For every issue returns: original phrase, issue type, explanation,
+        suggested improvement, criterion affected, and severity.
+
+        Falls back to a deterministic analysis when no AI provider is available.
+        """
+        context = {
+            "part": part,
+            "topic": topic,
+            "word_count": len(transcript.split()) if transcript else 0,
+            "transcript": transcript[:3000] if transcript else "",
+        }
+
+        if self.api_key:
+            try:
+                prompt = _build_speaking_errors_prompt(context)
+                async with AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "gpt-4o-mini",
+                            "messages": [
+                                {"role": "system", "content": IELTS_SPEAKING_ERROR_ANALYSIS_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ],
+                            "temperature": 0.3,
+                            "response_format": {"type": "json_object"},
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    content = data["choices"][0]["message"]["content"] or ""
+                    content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
+                    parsed = json.loads(content)
+                    if isinstance(parsed, dict):
+                        result = _normalize_speaking_error_analysis(parsed)
+                        result["source"] = "ai"
+                        return result
+            except Exception as e:
+                logger.warning("AI speaking error analysis fallback: %s", e)
+
+        result = _fallback_speaking_error_analysis(context, transcript)
+        result["source"] = "deterministic_fallback"
+        return result
+
+    async def generate_speaking_improvement_plan(
+        self,
+        evaluation: Dict[str, Any],
+        target_band: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Generate a personalized "Improve My Speaking Band" plan.
+
+        Uses the AI service (backend-only) with a deterministic fallback.
+        The plan is based on the student's actual evaluation data.
+        """
+        criteria_bands = evaluation.get("criteria_bands", evaluation) or {}
+        current_band = float(evaluation.get("overall_band", 0.0) or 0.0)
+
+        if target_band is None:
+            target_band = current_band + 1.0
+        target_band = min(max(target_band, 1.0), 9.0)
+        band_gap = round(target_band - current_band, 1)
+
+        strongest, weakest = _rank_speaking_weaknesses(criteria_bands)
+
+        context = {
+            "current_band": current_band,
+            "target_band": target_band,
+            "band_gap": band_gap,
+            "fluency_coherence_band": criteria_bands.get("fluency_coherence", current_band),
+            "lexical_resource_band": criteria_bands.get("lexical_resource", current_band),
+            "grammatical_range_band": criteria_bands.get("grammatical_range", current_band),
+            "pronunciation_band": criteria_bands.get("pronunciation", current_band),
+            "strongest_criterion": strongest,
+            "weakest_criterion": weakest,
+            "issues_summary": evaluation.get("issues_summary", ""),
+            "part": evaluation.get("part", "part_1"),
+            "topic": evaluation.get("topic", evaluation.get("title", "")),
+            "transcript": (evaluation.get("transcript", "") or "")[:2000],
+        }
+
+        if self.api_key:
+            try:
+                prompt = _build_speaking_plan_prompt(context)
+                async with AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "gpt-4o-mini",
+                            "messages": [
+                                {"role": "system", "content": IELTS_SPEAKING_IMPROVEMENT_PLAN_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ],
+                            "temperature": 0.3,
+                            "response_format": {"type": "json_object"},
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    content = data["choices"][0]["message"]["content"] or ""
+                    content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
+                    parsed = json.loads(content)
+                    if isinstance(parsed, dict):
+                        result = _normalize_speaking_improvement_plan(parsed)
+                        result["source"] = "ai"
+                        return result
+            except Exception as e:
+                logger.warning("AI speaking improvement plan fallback: %s", e)
+
+        result = _fallback_speaking_improvement_plan(context)
+        result["source"] = "deterministic_fallback"
+        return result
+
+    async def generate_speaking_reattempt_comparison(
+        self,
+        attempt_1: Dict[str, Any],
+        attempt_2: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Generate a natural-language comparison between two speaking attempts.
+
+        Uses the AI service (backend-only) with a deterministic fallback.
+        """
+        context = _build_reattempt_comparison_context(attempt_1, attempt_2)
+
+        if self.api_key:
+            try:
+                prompt = _build_reattempt_comparison_prompt(context)
+                async with AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "gpt-4o-mini",
+                            "messages": [
+                                {"role": "system", "content": IELTS_SPEAKING_REATTEMPT_COMPARISON_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ],
+                            "temperature": 0.3,
+                            "response_format": {"type": "json_object"},
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    content = data["choices"][0]["message"]["content"] or ""
+                    content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
+                    parsed = json.loads(content)
+                    if isinstance(parsed, dict):
+                        result = _normalize_reattempt_comparison(parsed)
+                        result["source"] = "ai"
+                        return result
+            except Exception as e:
+                logger.warning("AI speaking reattempt comparison fallback: %s", e)
+
+        result = _fallback_reattempt_comparison(context)
+        result["source"] = "deterministic_fallback"
+        return result
+
     async def analyze_speaking(self, user_transcript: str) -> Dict[str, Any]:
         """
         Analyse a Speaking transcript using OpenAI (if API key is set) or
@@ -1215,6 +2117,178 @@ class AIService:
             "band_score": 6.0,
             "feedback": "Your fluency is good, but try to elaborate more and use a wider range of linking devices.",
             "corrections": ["Use 'moreover' to extend ideas", "Reduce filler words like 'um'"],
+        }
+
+    async def speaking_coach_chat(
+        self,
+        question: str,
+        transcript: str,
+        evaluation: Dict[str, Any],
+        error_analysis: Optional[Dict[str, Any]] = None,
+        previous_attempts: Optional[List[Dict[str, Any]]] = None,
+        target_band: Optional[float] = None,
+        weaknesses: Optional[List[str]] = None,
+        student_question: str = "",
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Chat with the AI Speaking Coach using the student's actual response data.
+
+        Uses the real transcript, evaluation, error analysis, previous attempts,
+        target band, and weaknesses to produce a personalized answer. Falls back
+        to a deterministic response when no API key is configured.
+        """
+        error_analysis_str = ""
+        if error_analysis and error_analysis.get("issues"):
+            error_analysis_str = "; ".join(
+                f"{i.get('issue_type', 'Unknown')}: {i.get('explanation', '')}"
+                for i in error_analysis["issues"][:10]
+            )
+
+        attempts_str = ""
+        if previous_attempts:
+            attempts_str = json.dumps([
+                {
+                    "band": a.get("overall_band", ""),
+                    "errors": a.get("error_count", 0),
+                    "duration": a.get("duration_seconds", 0),
+                }
+                for a in previous_attempts[:5]
+            ])
+
+        weaknesses_str = ", ".join(weaknesses or [])
+        target_str = str(target_band) if target_band else "none set"
+
+        prompt = (
+            IELTS_SPEAKING_COACH_PROMPT
+            .replace("{question}", question)
+            .replace("{transcript}", transcript)
+            .replace("{overall_band}", str(evaluation.get("overall_band", evaluation.get("band_score", ""))))
+            .replace("{fluency_band}", str(evaluation.get("fluency_coherence_band", evaluation.get("fluency_coherence", ""))))
+            .replace("{lexical_band}", str(evaluation.get("lexical_resource_band", evaluation.get("lexical_resource", ""))))
+            .replace("{grammar_band}", str(evaluation.get("grammatical_range_band", evaluation.get("grammatical_range", ""))))
+            .replace("{pronunciation_band}", str(evaluation.get("pronunciation_band", evaluation.get("pronunciation", ""))))
+            .replace("{error_analysis}", error_analysis_str)
+            .replace("{previous_attempts}", attempts_str)
+            .replace("{target_band}", target_str)
+            .replace("{weaknesses}", weaknesses_str)
+            .replace("{student_question}", student_question)
+        )
+
+        if self.api_key:
+            messages = [{"role": "system", "content": IELTS_SPEAKING_COACH_PROMPT}]
+            if conversation_history:
+                messages.extend(conversation_history)
+            messages.append({"role": "user", "content": prompt})
+            try:
+                async with AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "gpt-4o-mini",
+                            "messages": [
+                                {"role": "system", "content": IELTS_SPEAKING_COACH_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ] + (conversation_history or []),
+                            "temperature": 0.3,
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    content = data["choices"][0]["message"]["content"] or ""
+                    try:
+                        parsed = json.loads(content)
+                        parsed["source"] = "ai"
+                        return parsed
+                    except (json.JSONDecodeError, ValueError):
+                        return {
+                            "answer": content[:500] if content else "I'd be happy to help you with your speaking!",
+                            "key_points": [],
+                            "example": "",
+                            "action_step": "Practice the skill we discussed today.",
+                            "tone": "encouraging",
+                            "source": "ai_raw",
+                        }
+            except Exception as e:
+                logger.warning("AI speaking coach chat fallback: %s", e)
+
+        return self._fallback_speaking_coach(
+            prompt, transcript, evaluation, student_question, weaknesses_str
+        )
+
+    def _fallback_speaking_coach(
+        self,
+        prompt: str,
+        transcript: str,
+        evaluation: Dict[str, Any],
+        student_question: str,
+        weaknesses: str,
+    ) -> Dict[str, Any]:
+        """Deterministic fallback for the speaking coach."""
+        band = evaluation.get("overall_band", evaluation.get("band_score", 6.0))
+        transcript_preview = transcript[:100] if transcript else "(no transcript)"
+        word_count = len(transcript.split()) if transcript else 0
+
+        answer = (
+            f"Looking at your response, your overall band is {band}. "
+            f"Your transcript is: \"{transcript_preview}\"."
+        )
+        if student_question:
+            answer += f" Regarding your question '{student_question}': "
+
+        if "why did i get" in student_question.lower() or "6.5" in student_question:
+            bands = {
+                "Fluency & Coherence": evaluation.get("fluency_coherence_band", evaluation.get("fluency_coherence", "")),
+                "Lexical Resource": evaluation.get("lexical_resource_band", evaluation.get("lexical_resource", "")),
+                "Grammatical Range": evaluation.get("grammatical_range_band", evaluation.get("grammatical_range", "")),
+                "Pronunciation": evaluation.get("pronunciation_band", evaluation.get("pronunciation", "")),
+            }
+            lowest = min(bands, key=lambda k: float(bands[k]) if bands[k] else 9.0)
+            answer += (
+                f"Your lowest criterion is {lowest} at "
+                f"{bands[lowest]}. Improving this will raise your overall band."
+            )
+            action_step = f"Focus your next practice on {lowest} — use the weak-area practice mode."
+        elif "fluency" in student_question.lower():
+            answer += (
+                f"Your response contains {word_count} words. "
+                f"For a stronger fluency score, aim for more detailed, connected responses "
+                f"rather than short phrases. Practice timing yourself: 1 minute for Part 1."
+            )
+            action_step = "Practice extending your Part 1 answers to 40-50 words with 2-3 ideas."
+        elif "too short" in student_question.lower():
+            if word_count < 40:
+                answer += f"Your response seems short at {word_count} words. Try adding examples and explaining your reasons."
+            else:
+                answer += f"Your response is {word_count} words, which is reasonable for this part."
+            action_step = "Count your words after each practice to track length."
+        elif "vocabulary" in student_question.lower():
+            answer += f"Build topic-specific vocabulary. For your response about '{transcript_preview[:50]}', try using more precise words."
+            action_step = "Learn 5 topic-specific synonyms before your next practice."
+        elif "grammar" in student_question.lower():
+            answer += f"Work on using a mix of simple and complex sentence structures — compound, relative clauses, and conditionals."
+            action_step = "Practice writing one complex sentence and one simple sentence per idea."
+        else:
+            answer += (
+                "Your practice shows room for improvement. Keep going — each attempt "
+                "builds your confidence and skills!"
+            )
+            action_step = "Use the weak-area practice mode to focus on your lowest band criterion."
+
+        if weaknesses:
+            answer += f" Current weaknesses: {weaknesses}."
+
+        return {
+            "answer": answer,
+            "key_points": ["Keep practicing", "Focus on your weakest area"],
+            "example": "",
+            "action_step": action_step,
+            "tone": "encouraging",
+            "source": "deterministic_fallback",
         }
 
 

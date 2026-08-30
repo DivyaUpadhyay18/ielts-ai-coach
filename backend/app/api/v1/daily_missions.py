@@ -7,6 +7,7 @@ and status (pending / completed / skipped).
 
 Generation uses deterministic placeholder data — NO AI scheduling.
 """
+import logging
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query
 from typing import List, Optional
@@ -14,6 +15,7 @@ from typing import List, Optional
 from app.api.deps import (
     get_current_user,
     get_daily_mission_repo,
+    get_reflection_engine,
     get_progress_tracking_repo,
     get_streak_repo,
 )
@@ -30,6 +32,10 @@ from app.models.daily_mission import (
 from app.repositories.daily_mission_repo import DailyMissionRepository
 from app.repositories.progress_tracking_repo import ProgressTrackingRepository
 from app.repositories.streak_repo import StreakRepository
+from app.services.reflection_engine import ReflectionEngine
+
+
+logger = logging.getLogger(__name__)
 
 
 def _log_mission_session(
@@ -237,8 +243,9 @@ async def complete_daily_mission(
     mission_id: str,
     user_id: str = Depends(get_current_user),
     repo: DailyMissionRepository = Depends(get_daily_mission_repo),
-    progress_repo: ProgressTrackingRepository = Depends(get_progress_tracking_repo),
+        progress_repo: ProgressTrackingRepository = Depends(get_progress_tracking_repo),
     streak_repo: StreakRepository = Depends(get_streak_repo),
+    reflection_engine: ReflectionEngine = Depends(get_reflection_engine),
 ):
     """
     Mark a mission as completed with 100% completion.
@@ -252,9 +259,16 @@ async def complete_daily_mission(
         mission_date = date.fromisoformat(mission_date)
 
     # Feed minutes + XP into the progress-tracking ledger.
-    _log_mission_session(updated, user_id, progress_repo)
+        _log_mission_session(updated, user_id, progress_repo)
     # Recompute streaks (carry-forward, perfect-day, milestone bonuses).
     _process_streaks(user_id, mission_date, streak_repo)
+
+    # Generate & store a structured reflection for the completed mission
+    # (best-effort: never blocks the completion response).
+    try:
+        reflection_engine.generate_and_store(user_id, updated)
+    except Exception as exc:
+        logger.info("reflection generation skipped mission=%s: %s", updated.get("id"), exc)
 
     # Check if all missions for today are completed → auto-generate tomorrow's missions.
     try:

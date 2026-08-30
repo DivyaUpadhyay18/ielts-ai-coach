@@ -28,6 +28,7 @@ from app.core.exceptions import NotFoundError, ValidationError
 from app.db.session import DatabaseSession
 from app.repositories.recommendation_repo import RecommendationRepository
 from app.repositories.resource_management_repo import ResourceRepository
+from app.services.diagnostic_roadmap_service import diagnostic_roadmap_service
 
 logger = logging.getLogger(__name__)
 
@@ -85,12 +86,20 @@ class RecommendationEngineService:
         if not user:
             raise NotFoundError("User not found")
 
-        current_band = float(user.get("current_band") or 5.0)
-        target_band = float(user.get("target_band") or 6.5)
+        # Diagnostic-first profile signals (measured performance > manual assumptions).
+        diag = diagnostic_roadmap_service.resolve_profile(user_id)
+        current_band = float(diag.get("current_band") or user.get("current_band") or 5.0)
+        target_band = float(diag.get("target_band") or user.get("target_band") or 6.5)
+        if target_band < current_band:
+            target_band = min(9.0, current_band + 1.0)
         exam_date_str = user.get("exam_date")
         daily_budget = int(user.get("daily_minutes_budget") or 60)
-        weakest_skill = user.get("weakest_skill") or []
-        strongest_skill = user.get("strongest_skill") or []
+        if diag.get("has_diagnostic"):
+            weakest_skill = list(diag.get("weakest_skills") or [])
+            strongest_skill = list(diag.get("strongest_skills") or [])
+        else:
+            weakest_skill = user.get("weakest_skill") or []
+            strongest_skill = user.get("strongest_skill") or []
 
         # ─── 2. Compute remaining days ─────────────────────────────────
         remaining_days = None

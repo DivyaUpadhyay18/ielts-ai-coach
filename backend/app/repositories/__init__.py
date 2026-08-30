@@ -14,6 +14,9 @@ from app.repositories.notification_repo import NotificationRepository
 from app.repositories.progress_tracking_repo import ProgressTrackingRepository
 from app.repositories.streak_repo import StreakRepository
 from app.repositories.scheduler_repo import SchedulerRepository
+from app.repositories.analytics_repo import AnalyticsRepository
+from app.repositories.resource_quality_repo import ResourceQualityRepository
+from app.repositories.diagnostic_repo import DiagnosticRepository
 
 __all__ = [
     "BaseRepository",
@@ -29,4 +32,7 @@ __all__ = [
     "ProgressTrackingRepository",
     "StreakRepository",
     "SchedulerRepository",
+    "AnalyticsRepository",
+    "ResourceQualityRepository",
+    "DiagnosticRepository",
 ]

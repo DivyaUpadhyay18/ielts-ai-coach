@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -81,6 +81,14 @@ const SKILL_LABELS: Record<string, string> = {
 };
 
 export default function DiagnosticResultPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">Loading...</div>}>
+      <DiagnosticResultContent />
+    </Suspense>
+  );
+}
+
+function DiagnosticResultContent() {
   const searchParams = useSearchParams();
   const attemptId = searchParams.get("attempt_id");
   const [loading, setLoading] = useState(true);

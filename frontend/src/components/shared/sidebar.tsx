@@ -20,6 +20,7 @@ import {
   Trophy,
   MessageSquare,
   Brain,
+  Headphones,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
@@ -44,6 +45,12 @@ const Sidebar = () => {
       icon: Mic,
       href: "/speaking",
       active: pathname.startsWith("/speaking"),
+    },
+    {
+      label: "Speaking Test",
+      icon: Headphones,
+      href: "/speaking-test",
+      active: pathname === "/speaking-test" || pathname.startsWith("/speaking-test"),
     },
     {
       label: "History & Analytics",

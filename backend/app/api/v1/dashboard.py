@@ -16,6 +16,7 @@ from app.repositories.daily_mission_repo import DailyMissionRepository
 from app.repositories.progress_tracking_repo import ProgressTrackingRepository
 from app.repositories.streak_repo import StreakRepository
 from app.db.session import db_session
+from app.services.diagnostic_roadmap_service import diagnostic_roadmap_service
 
 router = APIRouter()
 
@@ -237,8 +238,10 @@ async def get_dashboard_overview(
             exam_date = None
 
     daily_budget = int(user_row.get("daily_minutes_budget") or 60)
-    current_band = user_row.get("current_band")
-    target_band = user_row.get("target_band")
+    # Diagnostic-first band/profile signals (measured performance > manual).
+    diag = diagnostic_roadmap_service.resolve_profile(user_id)
+    current_band = diag.get("current_band") if diag.get("has_diagnostic") else user_row.get("current_band")
+    target_band = diag.get("target_band") if diag.get("has_diagnostic") else user_row.get("target_band")
     full_name = user_row.get("full_name") or "Student"
     first_name = full_name.split(" ")[0] if full_name else "Student"
 
@@ -411,6 +414,17 @@ async def get_dashboard_overview(
         },
         "current_band": current_band,
         "target_band": target_band,
+        "diagnostic_profile": {
+            "has_diagnostic": diag.get("has_diagnostic", False),
+            "source": diag.get("source", "default"),
+            "attempt_id": diag.get("attempt_id"),
+            "current_band": diag.get("current_band"),
+            "target_band": diag.get("target_band"),
+            "weakest_skills": diag.get("weakest_skills", []),
+            "strongest_skills": diag.get("strongest_skills", []),
+            "skill_bands": diag.get("skill_bands", {}),
+            "focus_areas": diag.get("focus_areas", []),
+        },
         "predicted_band": {
             "band": None,
             "trend": None,

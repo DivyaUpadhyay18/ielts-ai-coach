@@ -214,6 +214,26 @@ class WritingWorkspaceService:
             "submitted_at": datetime.utcnow().isoformat(),
         })
 
+        # Create the evaluation record for this submission.
+        #
+        # AI scoring is NOT implemented yet (future phase).  A pending
+        # record is created so every submitted essay owns an evaluation slot
+        # that can be filled in later.
+        try:
+            self.repo.create_evaluation(
+                user_id=user_id,
+                submission_id=submission_id,
+                task_type=submission.get("task_type") or "task_2",
+                word_count=word_count,
+            )
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(
+                "writing workspace evaluation record not created "
+                "user=%s submission=%s err=%s",
+                user_id, submission_id, e,
+            )
+        updated["evaluation_status"] = "pending"
+
         # Ensure submission_summary is present in the response even if the
         # DB row does not return it (defensive for mock/test scenarios).
         if not updated.get("submission_summary"):
@@ -280,6 +300,7 @@ class WritingWorkspaceService:
             ),
             "status": submission.get("status") or "draft",
             "is_locked": bool(submission.get("is_locked") or False),
+            "evaluation_status": submission.get("evaluation_status"),
             "submission_summary": submission.get("submission_summary") or {},
             "created_at": submission.get("created_at"),
             "updated_at": submission.get("updated_at"),

@@ -18,11 +18,14 @@ Provides full CRUD for the resource catalog:
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 
-from app.api.deps import get_current_user, get_resource_management_repo
+from app.api.deps import get_current_user, get_resource_management_repo, get_current_admin
 from app.models.resource_management import (
     ResourceCreate,
     ResourceResponse,
-    ResourceSearchFilters,
+    ResourceSuggestionCreate,
+    ResourceSuggestionResponse,
+    ResourceSuggestionUpdate,
+    ResourceSuggestionVoteResponse,
     ResourceUpdate,
 )
 from app.repositories.resource_management_repo import ResourceRepository
@@ -327,6 +330,88 @@ async def get_free_resources(
     return repo.get_free(limit=limit)
 
 
+# ─────────────────────────────────────────────────────────────
+# Community Suggestion endpoints — user-facing
+# ─────────────────────────────────────────────────────────────
+
+@router.get(
+    "/suggestions/community",
+    response_model=List[ResourceSuggestionResponse],
+    summary="Get approved community suggestions",
+)
+async def get_community_suggestions(
+    category: Optional[str] = Query(None, description="Filter by category"),
+    skill: Optional[str] = Query(None, description="Filter by skill"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user_id: str = Depends(get_current_user),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Get approved community suggestions for browsing and voting."""
+    items = repo.get_community_suggestions(category=category, skill=skill, limit=limit, offset=offset)
+    for item in items:
+        item["voted"] = repo.get_suggestion_vote(user_id, item["id"])
+    return items
+
+
+@router.get(
+    "/suggestions/mine",
+    response_model=List[ResourceSuggestionResponse],
+    summary="Get current user's suggestions",
+)
+async def get_my_suggestions(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user_id: str = Depends(get_current_user),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Get the current user's own suggestions with status."""
+    return repo.get_user_suggestions(user_id, limit=limit, offset=offset)
+
+
+@router.post(
+    "/suggestions",
+    response_model=ResourceSuggestionResponse,
+    status_code=201,
+    summary="Submit a community resource suggestion",
+)
+async def create_suggestion(
+    data: ResourceSuggestionCreate,
+    user_id: str = Depends(get_current_user),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Submit a new community resource suggestion. Goes to moderation (pending)."""
+    return repo.create_suggestion(user_id, data.model_dump())
+
+
+@router.post(
+    "/suggestions/{suggestion_id}/vote",
+    response_model=ResourceSuggestionVoteResponse,
+    summary="Vote on a suggestion",
+)
+async def vote_suggestion(
+    suggestion_id: str,
+    user_id: str = Depends(get_current_user),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Cast a vote on a community suggestion (one vote per user)."""
+    return repo.vote_suggestion(user_id, suggestion_id)
+
+
+@router.delete(
+    "/suggestions/{suggestion_id}/vote",
+    response_model=ResourceSuggestionVoteResponse,
+    summary="Remove a vote from a suggestion",
+)
+async def unvote_suggestion(
+    suggestion_id: str,
+    user_id: str = Depends(get_current_user),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Remove the current user's vote from a suggestion."""
+    return repo.unvote_suggestion(user_id, suggestion_id)
+
+
 @router.get(
     "/{resource_id}",
     response_model=ResourceResponse,
@@ -410,3 +495,197 @@ async def update_rating(
 ):
     """Update the rating of a resource."""
     return repo.increment_rating(resource_id, rating)
+
+
+# ─────────────────────────────────────────────────────────────
+# Admin endpoints — require admin role
+# ─────────────────────────────────────────────────────────────
+
+@router.post(
+    "/bulk",
+    response_model=dict,
+    status_code=201,
+    summary="Bulk upload resources (admin)",
+)
+async def bulk_upload_resources(
+    resources: List[ResourceCreate],
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Bulk upload multiple resources. Admin-only."""
+    service = ResourceManagementService(repo)
+    payloads = [r.model_dump() for r in resources]
+    return service.bulk_create_resources(payloads, admin_id)
+
+
+@router.patch(
+    "/bulk",
+    response_model=dict,
+    summary="Bulk edit resources (admin)",
+)
+async def bulk_edit_resources(
+    updates: List[dict],
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Bulk edit multiple resources. Each item must have an 'id' field. Admin-only."""
+    service = ResourceManagementService(repo)
+    return service.bulk_update_resources(updates, admin_id)
+
+
+@router.delete(
+    "/bulk",
+    response_model=dict,
+    summary="Bulk delete resources (admin)",
+)
+async def bulk_delete_resources(
+    resource_ids: List[str],
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Bulk delete resources by IDs. Admin-only."""
+    service = ResourceManagementService(repo)
+    return service.bulk_delete_resources(resource_ids, admin_id)
+
+
+@router.post(
+    "/{resource_id}/verify",
+    response_model=ResourceResponse,
+    summary="Verify a resource (admin)",
+)
+async def verify_resource(
+    resource_id: str,
+    notes: Optional[str] = Query(None, description="Admin notes for verification"),
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Mark a resource as verified. Admin-only."""
+    service = ResourceManagementService(repo)
+    return service.verify_resource(resource_id, admin_id, notes)
+
+
+@router.post(
+    "/{resource_id}/unverify",
+    response_model=ResourceResponse,
+    summary="Remove verification from a resource (admin)",
+)
+async def unverify_resource(
+    resource_id: str,
+    notes: Optional[str] = Query(None, description="Admin notes for unverification"),
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Remove verification status from a resource. Admin-only."""
+    service = ResourceManagementService(repo)
+    return service.unverify_resource(resource_id, admin_id, notes)
+
+
+@router.get(
+    "/{resource_id}/verification-log",
+    response_model=List[dict],
+    summary="Get verification log for a resource (admin)",
+)
+async def get_verification_log(
+    resource_id: str,
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Get the verification audit log for a resource."""
+    service = ResourceManagementService(repo)
+    return service.get_verification_log(resource_id)
+
+
+@router.get(
+    "/suggestions",
+    response_model=List[dict],
+    summary="Get community resource suggestions (admin)",
+)
+async def get_suggestions(
+    status: Optional[str] = Query(None, description="Filter by status: pending, approved, rejected"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Get community-submitted resource suggestions for admin review."""
+    service = ResourceManagementService(repo)
+    return service.get_suggestions(status=status, limit=limit, offset=offset)
+
+
+@router.post(
+    "/suggestions/{suggestion_id}/approve",
+    response_model=ResourceResponse,
+    summary="Approve a community suggestion (admin)",
+)
+async def approve_suggestion(
+    suggestion_id: str,
+    notes: Optional[str] = Query(None, description="Admin notes"),
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Approve a community suggestion and create the resource. Admin-only."""
+    service = ResourceManagementService(repo)
+    return service.approve_suggestion(suggestion_id, admin_id, notes)
+
+
+@router.post(
+    "/suggestions/{suggestion_id}/reject",
+    response_model=dict,
+    summary="Reject a community suggestion (admin)",
+)
+async def reject_suggestion(
+    suggestion_id: str,
+    notes: Optional[str] = Query(None, description="Admin notes for rejection"),
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Reject a community suggestion. Admin-only."""
+    service = ResourceManagementService(repo)
+    return service.reject_suggestion(suggestion_id, admin_id, notes)
+
+
+@router.patch(
+    "/suggestions/{suggestion_id}",
+    response_model=ResourceSuggestionResponse,
+    summary="Edit a community suggestion (admin)",
+)
+async def edit_suggestion(
+    suggestion_id: str,
+    data: ResourceSuggestionUpdate,
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Edit a community suggestion (e.g. correct details before approving). Admin-only."""
+    payload = data.model_dump(exclude_none=True)
+    if not payload:
+        return repo.get_suggestion_by_id(suggestion_id)
+    return repo.update_suggestion(suggestion_id, payload)
+
+
+@router.get(
+    "/admin/analytics",
+    response_model=dict,
+    summary="Get admin resource analytics",
+)
+async def get_admin_analytics(
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Get comprehensive analytics for the admin resource dashboard."""
+    service = ResourceManagementService(repo)
+    return service.get_admin_analytics()
+
+
+@router.get(
+    "/{resource_id}/analytics",
+    response_model=dict,
+    summary="Get detailed analytics for a single resource (admin)",
+)
+async def get_resource_analytics(
+    resource_id: str,
+    admin_id: str = Depends(get_current_admin),
+    repo: ResourceRepository = Depends(get_resource_management_repo),
+):
+    """Get detailed analytics for a single resource including views, completions, likes, ratings."""
+    service = ResourceManagementService(repo)
+    return service.get_resource_analytics(resource_id)
