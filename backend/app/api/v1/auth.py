@@ -2,6 +2,8 @@
 Authentication endpoints for user registration, login, token refresh, logout,
 password reset, and profile management.
 """
+import asyncio
+
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import Optional
 from datetime import datetime, timezone
@@ -76,13 +78,27 @@ async def register(
         # Hash the password
         hashed_password = get_password_hash(user_data.password)
         
-        # Create user in Supabase Auth
-        auth_result = supabase.auth.admin.create_user(
-            email=user_data.email,
-            password=user_data.password,
-            email_confirm=True,
-            user_metadata={"full_name": user_data.full_name},
-        )
+        # Create user in Supabase Auth.
+        # The Supabase admin client is synchronous (blocking), so it MUST NOT be
+        # called directly inside an async route: on a single-worker deployment a
+        # slow/unresponsive Supabase Admin API would freeze the entire event
+        # loop. Run it in a thread and enforce a hard 15-second timeout.
+        try:
+            auth_result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    supabase.auth.admin.create_user,
+                    email=user_data.email,
+                    password=user_data.password,
+                    email_confirm=True,
+                    user_metadata={"full_name": user_data.full_name},
+                ),
+                timeout=15.0,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="User creation timed out. Please try again.",
+            )
         
         user_id = auth_result.user.id
         
