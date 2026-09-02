@@ -9,7 +9,7 @@ app at import time.
 """
 from typing import Any
 
-from supabase import create_client, Client
+from supabase import ClientOptions, create_client, Client
 
 from app.core.config import settings
 
@@ -30,6 +30,12 @@ class _LazySupabaseClient:
             _client = create_client(
                 settings.SUPABASE_URL,
                 settings.SUPABASE_SERVICE_ROLE_KEY,
+                # Defense in depth: cap PostgREST (table) requests at 10s
+                # instead of the library default of 120s, so any blocking
+                # supabase.table(...) call that is not individually wrapped
+                # in asyncio.wait_for still fails fast rather than hanging
+                # the single-worker event loop for 2 minutes.
+                options=ClientOptions(postgrest_client_timeout=10),
             )
         except Exception as exc:  # pragma: no cover - depends on env config
             _client_error = exc

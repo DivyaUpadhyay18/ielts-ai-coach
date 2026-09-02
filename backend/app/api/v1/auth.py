@@ -67,8 +67,27 @@ async def register(
                 detail=password_error,
             )
         
-        # Check if email already exists
-        existing = supabase.table("users").select("id").eq("email", user_data.email).maybe_single().execute()
+        # Check if email already exists.
+        # The Supabase client is synchronous (blocking), so it MUST NOT be
+        # called directly inside an async route: a slow/unresponsive PostgREST
+        # call would freeze the entire event loop on a single-worker
+        # deployment. Run it in a thread and enforce a hard 10-second timeout.
+        try:
+            existing = await asyncio.wait_for(
+                asyncio.to_thread(
+                    lambda: supabase.table("users")
+                    .select("id")
+                    .eq("email", user_data.email)
+                    .maybe_single()
+                    .execute()
+                ),
+                timeout=10.0,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Email verification timed out. Please try again.",
+            )
         if existing.data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
