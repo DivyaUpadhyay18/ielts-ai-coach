@@ -59,6 +59,7 @@ async def register(
     - Returns JWT access and refresh tokens
     """
     try:
+        print("REGISTER: entered register() handler", flush=True)
         # Validate password strength
         password_error = validate_password_strength(user_data.password)
         if password_error:
@@ -72,6 +73,7 @@ async def register(
         # called directly inside an async route: a slow/unresponsive PostgREST
         # call would freeze the entire event loop on a single-worker
         # deployment. Run it in a thread and enforce a hard 10-second timeout.
+        print("REGISTER: starting email-exists check", flush=True)
         try:
             existing = await asyncio.wait_for(
                 asyncio.to_thread(
@@ -88,6 +90,7 @@ async def register(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail="Email verification timed out. Please try again.",
             )
+        print("REGISTER: email-exists check done", flush=True)
         if existing.data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -102,6 +105,7 @@ async def register(
         # called directly inside an async route: on a single-worker deployment a
         # slow/unresponsive Supabase Admin API would freeze the entire event
         # loop. Run it in a thread and enforce a hard 15-second timeout.
+        print("REGISTER: starting create_user (Supabase Admin API)", flush=True)
         try:
             auth_result = await asyncio.wait_for(
                 asyncio.to_thread(
@@ -118,7 +122,8 @@ async def register(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail="User creation timed out. Please try again.",
             )
-        
+        print("REGISTER: create_user done", flush=True)
+
         user_id = auth_result.user.id
         
         # Create user profile in our users table
@@ -133,18 +138,53 @@ async def register(
             "updated_at": now,
         }
         
-        supabase.table("users").insert(user_profile).execute()
+        # Create user profile in our users table.
+        # This is a blocking Supabase call, so it MUST NOT be awaited directly
+        # inside an async route: on a single-worker deployment a slow/hung
+        # PostgREST insert would freeze the entire event loop. Run it in a
+        # thread and enforce a hard 10-second timeout.
+        print("REGISTER: starting users-table insert", flush=True)
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(
+                    lambda: supabase.table("users").insert(user_profile).execute()
+                ),
+                timeout=10.0,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Profile creation (users-table insert) timed out. Please try again.",
+            )
+        print("REGISTER: users-table insert done", flush=True)
         
         # Generate tokens
         access_token, refresh_token = create_tokens(user_id, user_data.email, role="user")
         
-        # Store refresh token
-        supabase.table("refresh_tokens").insert({
-            "user_id": user_id,
-            "token_hash": get_password_hash(refresh_token),
-            "expires_at": (datetime.now(timezone.utc).replace(tzinfo=None) + __import__("datetime").timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)).isoformat(),
-            "created_at": now,
-        }).execute()
+        # Store refresh token.
+        # This is a blocking Supabase call, so it MUST NOT be awaited directly
+        # inside an async route: on a single-worker deployment a slow/hung
+        # PostgREST insert would freeze the entire event loop. Run it in a
+        # thread and enforce a hard 10-second timeout.
+        print("REGISTER: starting refresh_tokens insert", flush=True)
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(
+                    lambda: supabase.table("refresh_tokens").insert({
+                        "user_id": user_id,
+                        "token_hash": get_password_hash(refresh_token),
+                        "expires_at": (datetime.now(timezone.utc).replace(tzinfo=None) + __import__("datetime").timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)).isoformat(),
+                        "created_at": now,
+                    }).execute()
+                ),
+                timeout=10.0,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Session creation (refresh_tokens insert) timed out. Please try again.",
+            )
+        print("REGISTER: refresh_tokens insert done", flush=True)
         
         return TokenResponse(
             access_token=access_token,
