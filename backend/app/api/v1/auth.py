@@ -92,6 +92,14 @@ async def register(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail="Email verification timed out. Please try again.",
             )
+        except Exception:
+            # TEMP DEBUG (PGRST125 investigation): dump the full traceback of
+            # whatever postgrest-py raised, so Render's logs show the exact
+            # request/URL the client constructed. Re-raised unchanged so the
+            # response returned to the client is not affected.
+            import traceback
+            print("REGISTER EXCEPTION:", traceback.format_exc(), flush=True)
+            raise
         print("REGISTER: email-exists check done", flush=True)
         if existing.data and len(existing.data) > 0:
             raise HTTPException(

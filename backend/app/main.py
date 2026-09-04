@@ -11,6 +11,24 @@ from app.core.security import limiter
 from app.core.exceptions import register_exception_handlers
 import time
 
+# TEMP DEBUG (PGRST125 investigation): log the exact SUPABASE_URL value at
+# startup. Logs the URL only — never the service key. repr() exposes hidden
+# whitespace/quotes/newlines, and the flags detect the specific malformations
+# that make supabase-py build an invalid PostgREST path (it concatenates
+# f"{SUPABASE_URL}/rest/v1" verbatim, with no URL normalization).
+_supabase_url = settings.SUPABASE_URL
+_supabase_url_has_quotes = ('"' in _supabase_url) or ("'" in _supabase_url)
+print(
+    "SUPABASE_URL_DEBUG: "
+    f"repr={_supabase_url!r} "
+    f"endswith_slash={_supabase_url.endswith('/')} "
+    f"embedded_rest_v1={('/rest/v1' in _supabase_url)} "
+    f"unstripped_differs={(_supabase_url != _supabase_url.strip())} "
+    f"has_quotes={_supabase_url_has_quotes} "
+    f"https_scheme={_supabase_url.startswith('https://')}",
+    flush=True,
+)
+
 app = FastAPI(
     title="IELTS AI Coach API",
     description="Backend API for IELTS AI grading and feedback",
