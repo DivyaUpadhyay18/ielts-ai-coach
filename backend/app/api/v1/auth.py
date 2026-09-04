@@ -4,8 +4,7 @@ password reset, and profile management.
 """
 import asyncio
 
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from datetime import datetime, timezone
 from app.db.supabase import supabase
 from app.core.security import (
@@ -47,7 +46,7 @@ router = APIRouter()
 @limiter.limit(settings.RATE_LIMIT_AUTH)
 async def register(
     user_data: UserCreate,
-    request: Optional[str] = None,  # Required by slowapi
+    request: Request,  # Required by slowapi
 ):
     """
     Register a new user with email and password.
@@ -214,7 +213,7 @@ async def register(
 @limiter.limit(settings.RATE_LIMIT_AUTH)
 async def login(
     login_data: UserLogin,
-    request: Optional[str] = None,  # Required by slowapi
+    request: Request,  # Required by slowapi
 ):
     """
     Authenticate a user with email and password.
@@ -412,7 +411,7 @@ async def get_me(
 @limiter.limit(settings.RATE_LIMIT_AUTH)
 async def forgot_password(
     reset_data: PasswordResetRequest,
-    request: Optional[str] = None,  # Required by slowapi
+    request: Request,  # Required by slowapi
 ):
     """
     Request a password reset email.
