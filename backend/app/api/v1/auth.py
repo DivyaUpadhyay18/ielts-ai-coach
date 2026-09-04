@@ -68,6 +68,10 @@ async def register(
             )
         
         # Check if email already exists.
+        # NOTE: deliberately NOT using .maybe_single() here. postgrest-py 0.17.2
+        # fails to parse PostgREST's 204 No Content response when zero rows
+        # match, raising "Missing response" instead of returning empty data.
+        # A plain select returns a list (empty when no rows match).
         # The Supabase client is synchronous (blocking), so it MUST NOT be
         # called directly inside an async route: a slow/unresponsive PostgREST
         # call would freeze the entire event loop on a single-worker
@@ -79,7 +83,6 @@ async def register(
                     lambda: supabase.table("users")
                     .select("id")
                     .eq("email", user_data.email)
-                    .maybe_single()
                     .execute()
                 ),
                 timeout=10.0,
@@ -90,7 +93,7 @@ async def register(
                 detail="Email verification timed out. Please try again.",
             )
         print("REGISTER: email-exists check done", flush=True)
-        if existing.data:
+        if existing.data and len(existing.data) > 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="An account with this email already exists",
@@ -222,17 +225,21 @@ async def login(
     - Returns JWT access and refresh tokens
     """
     try:
-        # Find user by email
-        result = supabase.table("users").select("*").eq("email", login_data.email).maybe_single().execute()
+        # Find user by email.
+        # NOTE: deliberately NOT using .maybe_single() here: postgrest-py 0.17.2
+        # fails to parse PostgREST's 204 No Content response when zero rows
+        # match, raising "Missing response" instead of returning empty data.
+        # A plain select returns a list (empty when no rows match).
+        result = supabase.table("users").select("*").eq("email", login_data.email).execute()
         
-        if not result.data:
+        if not result.data or len(result.data) == 0:
             # Use generic message to prevent email enumeration
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
             )
         
-        user = result.data
+        user = result.data[0]
         
         # Check if user is active
         if not user.get("is_active", True):
@@ -418,23 +425,28 @@ async def forgot_password(
     Always returns success to prevent email enumeration.
     """
     try:
-        # Check if user exists
-        result = supabase.table("users").select("id, email").eq("email", reset_data.email).maybe_single().execute()
+        # Check if user exists.
+        # NOTE: deliberately NOT using .maybe_single() here: postgrest-py 0.17.2
+        # fails to parse PostgREST's 204 No Content response when zero rows
+        # match, raising "Missing response" instead of returning empty data.
+        # A plain select returns a list (empty when no rows match).
+        result = supabase.table("users").select("id, email").eq("email", reset_data.email).execute()
         
-        if result.data:
+        if result.data and len(result.data) > 0:
+            user_row = result.data[0]
             # Generate a password reset token (short-lived)
             from app.core.security import create_access_token
             from datetime import timedelta
             
             reset_token = create_access_token(
-                data={"sub": result.data["id"], "email": result.data["email"], "purpose": "password_reset"},
+                data={"sub": user_row["id"], "email": user_row["email"], "purpose": "password_reset"},
                 expires_delta=timedelta(hours=1),
             )
             
             # Store the reset token
             now = datetime.now(timezone.utc).isoformat()
             supabase.table("password_reset_tokens").insert({
-                "user_id": result.data["id"],
+                "user_id": user_row["id"],
                 "token_hash": get_password_hash(reset_token),
                 "expires_at": (datetime.now(timezone.utc).replace(tzinfo=None) + __import__("datetime").timedelta(hours=1)).isoformat(),
                 "is_used": False,
@@ -445,7 +457,7 @@ async def forgot_password(
             # reset_link = f"https://yourdomain.com/reset-password?token={reset_token}"
             # Send email via SendGrid, Resend, etc.
             
-            print(f"Password reset token for {result.data['email']}: {reset_token}")
+            print(f"Password reset token for {user_row['email']}: {reset_token}")
         
         # Always return success to prevent email enumeration
         return {
