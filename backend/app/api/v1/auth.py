@@ -149,24 +149,31 @@ async def register(
         }
         
         # Create user profile in our users table.
+        # An UPSERT on "id" is used (not a plain insert) because the
+        # on_auth_user_created trigger (001_users.sql) may have already
+        # created this row when Supabase Auth created the auth.users entry;
+        # a plain insert would collide on the primary key. On conflict the
+        # backend's values (full_name, password_hash, ...) win.
         # This is a blocking Supabase call, so it MUST NOT be awaited directly
         # inside an async route: on a single-worker deployment a slow/hung
-        # PostgREST insert would freeze the entire event loop. Run it in a
+        # PostgREST write would freeze the entire event loop. Run it in a
         # thread and enforce a hard 10-second timeout.
-        print("REGISTER: starting users-table insert", flush=True)
+        print("REGISTER: starting users-table upsert", flush=True)
         try:
             await asyncio.wait_for(
                 asyncio.to_thread(
-                    lambda: supabase.table("users").insert(user_profile).execute()
+                    lambda: supabase.table("users")
+                    .upsert(user_profile, on_conflict="id")
+                    .execute()
                 ),
                 timeout=10.0,
             )
         except asyncio.TimeoutError:
             raise HTTPException(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="Profile creation (users-table insert) timed out. Please try again.",
+                detail="Profile creation (users-table upsert) timed out. Please try again.",
             )
-        print("REGISTER: users-table insert done", flush=True)
+        print("REGISTER: users-table upsert done", flush=True)
         
         # Generate tokens
         access_token, refresh_token = create_tokens(user_id, user_data.email, role="user")
