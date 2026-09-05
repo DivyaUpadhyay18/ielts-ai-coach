@@ -117,13 +117,19 @@ async def register(
         # loop. Run it in a thread and enforce a hard 15-second timeout.
         print("REGISTER: starting create_user (Supabase Admin API)", flush=True)
         try:
+            # gotrue 2.12.x (installed: 2.12.3): create_user() takes a single
+            # AdminUserAttributes dict (email/password/email_confirm/
+            # user_metadata are keys in it, NOT separate keywords).
+            admin_user_attrs = {
+                "email": user_data.email,
+                "password": user_data.password,
+                "email_confirm": True,
+                "user_metadata": {"full_name": user_data.full_name},
+            }
             auth_result = await asyncio.wait_for(
                 asyncio.to_thread(
                     supabase.auth.admin.create_user,
-                    email=user_data.email,
-                    password=user_data.password,
-                    email_confirm=True,
-                    user_metadata={"full_name": user_data.full_name},
+                    admin_user_attrs,
                 ),
                 timeout=15.0,
             )
