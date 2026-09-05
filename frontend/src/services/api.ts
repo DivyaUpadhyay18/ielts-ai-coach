@@ -8,6 +8,48 @@ const API_V1_URL = `${API_URL.replace('/api', '')}/api/v1`;
 const ACCESS_TOKEN_KEY = 'ielts_access_token';
 const REFRESH_TOKEN_KEY = 'ielts_refresh_token';
 
+// Access token cookie helpers.
+//
+// Next.js middleware (frontend/src/middleware.ts) runs server-side and can
+// only see authentication state via cookies — localStorage is browser-only.
+// Mirror the access token into a cookie here so middleware can route to
+// /dashboard after a successful login instead of bouncing back to /login.
+const ACCESS_TOKEN_MAX_AGE_FALLBACK = 15 * 60; // backend ACCESS_TOKEN_EXPIRE_MINUTES = 15
+
+// Prefer the JWT's own `exp` claim (seconds) so the cookie doesn't outlive
+// the token; fall back to the 15-minute backend default if it can't be read.
+function getAccessTokenMaxAge(accessToken: string): number {
+  try {
+    const payloadPart = accessToken.split('.')[1];
+    if (payloadPart) {
+      const decoded = JSON.parse(
+        atob(payloadPart.replace(/-/g, '+').replace(/_/g, '/'))
+      );
+      const exp = Number(decoded?.exp);
+      if (Number.isFinite(exp) && exp > 0) {
+        const remaining = Math.floor(exp - Date.now() / 1000);
+        if (remaining > 0) return remaining;
+      }
+    }
+  } catch {
+    // malformed JWT - fall through to the default below
+  }
+  return ACCESS_TOKEN_MAX_AGE_FALLBACK;
+}
+
+function setAccessTokenCookie(accessToken: string): void {
+  if (typeof document === 'undefined') return;
+  const secure = location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie =
+    `${ACCESS_TOKEN_KEY}=${accessToken}; path=/; max-age=${getAccessTokenMaxAge(accessToken)}; SameSite=Lax${secure}`;
+}
+
+function clearAccessTokenCookie(): void {
+  if (typeof document === 'undefined') return;
+  const secure = location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${ACCESS_TOKEN_KEY}=; path=/; max-age=0; SameSite=Lax${secure}`;
+}
+
 // Token management
 export const tokenManager = {
   getAccessToken: (): string | null => {
@@ -23,11 +65,13 @@ export const tokenManager = {
   setTokens: (accessToken: string, refreshToken: string) => {
     localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
     localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    setAccessTokenCookie(accessToken);
   },
   
   clearTokens: () => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+    clearAccessTokenCookie();
   },
   
   isAuthenticated: (): boolean => {
