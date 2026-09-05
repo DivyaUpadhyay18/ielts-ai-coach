@@ -78,15 +78,26 @@ class DiagnosticService:
 
         If there is an existing in-progress attempt, it is resumed instead of
         creating a duplicate (resume support).
+
+        Returns the frontend's established DiagnosticStartResponse contract:
+        {"attempt": {...}, "is_new": bool, "message": str}.
         """
         existing = self.repo.get_active_attempt(user_id)
         if existing:
             logger.info("resuming diagnostic attempt user=%s attempt=%s", user_id, existing["id"])
-            return self._attempt_payload(existing)
+            return {
+                "attempt": self._attempt_payload(existing),
+                "is_new": False,
+                "message": "Resuming existing attempt",
+            }
 
         attempt = self.repo.create_attempt(user_id, {})
         logger.info("new diagnostic attempt user=%s attempt=%s", user_id, attempt["id"])
-        return self._attempt_payload(attempt)
+        return {
+            "attempt": self._attempt_payload(attempt),
+            "is_new": True,
+            "message": "Attempt started",
+        }
 
     def resume_attempt(self, attempt_id: str, user_id: str) -> Dict[str, Any]:
         """Resume a specific attempt and return its state + answered ids."""
