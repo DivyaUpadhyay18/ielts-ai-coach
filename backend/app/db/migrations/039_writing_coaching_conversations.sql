@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS public.writing_coaching_messages (
     role TEXT NOT NULL CHECK (role IN ('user', 'coach')),
     content TEXT NOT NULL,
     structured JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTSZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================================

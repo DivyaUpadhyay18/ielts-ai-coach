@@ -31,11 +31,15 @@ CREATE TABLE IF NOT EXISTS prediction_history (
     -- Recommendations
     recommendations         TEXT[],
 
-    -- Indexes
-    UNIQUE (user_id, run_date),
-    INDEX idx_prediction_user_date ON prediction_history (user_id, run_date DESC),
-    INDEX idx_prediction_user_generated ON prediction_history (user_id, generated_at DESC)
+    -- Constraints (indexes are created separately below, MySQL-style
+    -- inline INDEX declarations are not valid PostgreSQL syntax)
+    UNIQUE (user_id, run_date)
 );
+
+CREATE INDEX IF NOT EXISTS idx_prediction_user_date
+    ON prediction_history (user_id, run_date DESC);
+CREATE INDEX IF NOT EXISTS idx_prediction_user_generated
+    ON prediction_history (user_id, generated_at DESC);
 
 -- Track when predictions were last computed per user (for caching).
 CREATE TABLE IF NOT EXISTS prediction_cache (

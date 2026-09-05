@@ -64,14 +64,23 @@ CREATE POLICY "Users can view own speaking coach conversations"
     USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can insert own speaking coach conversations"
+    ON public.speaking_coach_conversations;
+
+CREATE POLICY "Users can insert own speaking coach conversations"
     ON public.speaking_coach_conversations FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can update own speaking coach conversations"
+    ON public.speaking_coach_conversations;
+
+CREATE POLICY "Users can update own speaking coach conversations"
     ON public.speaking_coach_conversations FOR UPDATE
     USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can delete own speaking coach conversations"
+    ON public.speaking_coach_conversations;
+
+CREATE POLICY "Users can delete own speaking coach conversations"
     ON public.speaking_coach_conversations FOR DELETE
     USING (auth.uid() = user_id);
 

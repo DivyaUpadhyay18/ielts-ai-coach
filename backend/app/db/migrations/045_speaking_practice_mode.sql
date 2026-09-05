@@ -95,14 +95,23 @@ CREATE POLICY "Users can view own speaking practice sessions"
     USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can insert own speaking practice sessions"
+    ON public.speaking_practice_sessions;
+
+CREATE POLICY "Users can insert own speaking practice sessions"
     ON public.speaking_practice_sessions FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can update own speaking practice sessions"
+    ON public.speaking_practice_sessions;
+
+CREATE POLICY "Users can update own speaking practice sessions"
     ON public.speaking_practice_sessions FOR UPDATE
     USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can delete own speaking practice sessions"
+    ON public.speaking_practice_sessions;
+
+CREATE POLICY "Users can delete own speaking practice sessions"
     ON public.speaking_practice_sessions FOR DELETE
     USING (auth.uid() = user_id);
 
@@ -138,6 +147,9 @@ CREATE POLICY "Users can view own speaking practice history"
     USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can insert own speaking practice history"
+    ON public.speaking_practice_history;
+
+CREATE POLICY "Users can insert own speaking practice history"
     ON public.speaking_practice_history FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 

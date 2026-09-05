@@ -313,7 +313,7 @@ VALUES
      2, 1.0, 45, 'part-2'),
     ('speaking',
      'To improve fluency, the speaker should ____.',
-     '["pause for several seconds on every word", "use fillers like "um" excessively", "speak at a natural, steady pace and use linking devices", "memorise a script and recite it"]',
+     '["pause for several seconds on every word", "use fillers like \"um\" excessively", "speak at a natural, steady pace and use linking devices", "memorise a script and recite it"]',
      '"speak at a natural, steady pace and use linking devices"',
      'Fluency is about natural pace and connecting ideas, not memorisation or excessive fillers.',
      3, 1.0, 60, 'fluency'),

@@ -25,7 +25,11 @@ CREATE TABLE IF NOT EXISTS public.analytics_events (
 CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON public.analytics_events(user_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_event ON public.analytics_events(event, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_entity ON public.analytics_events(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_analytics_events_date ON public.analytics_events(timestamp::date);
+-- NOTE: an expression index on (timestamp::date) was intentionally removed:
+-- PostgreSQL requires functions in index expressions to be IMMUTABLE, and
+-- casts from timestamptz to date are timezone-dependent (STABLE, not
+-- IMMUTABLE). Queries filtering by date can still use the plain
+-- idx_analytics_events_user / idx_analytics_events_event indexes.
 
 -- ============================================================
 -- 2. resource_analytics (per-resource aggregate counters)
